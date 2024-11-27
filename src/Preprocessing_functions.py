@@ -197,6 +197,61 @@ def encoding_ordinal(X_train, X_val, columns):
     X_val_encoded = pd.DataFrame(oe.transform(X_val[columns]), columns=columns)
     return X_train_encoded, X_val_encoded
 
+def remove_outliers_iqr(X_train, X_val, columns):
+    """
+    Remove rows with outliers using the IQR method.
+    
+    """
+    for col in columns:
+        Q1 = X_train[col].quantile(0.25)
+        Q3 = X_train[col].quantile(0.75)
+        IQR = Q3 - Q1
+        lower_bound = Q1 - 1.5 * IQR
+        upper_bound = Q3 + 1.5 * IQR
+
+        # Remove outliers from X_train
+        X_train = X_train[(X_train[col] >= lower_bound) & (X_train[col] <= upper_bound)]
+        
+        # Remove outliers from X_val (based on X_train bounds)
+        X_val = X_val[(X_val[col] >= lower_bound) & (X_val[col] <= upper_bound)]
+
+    return X_train, X_val
 
 
+
+def impute_mean_numerical(X_train, X_val):
+    """
+    Impute missing values for continuous (numerical) variables with the mean of the training data.
+    
+    """
+    # Identify numerical variables
+    continuous_columns = X_train.select_dtypes(include=['float64', 'int64']).columns
+
+    for col in continuous_columns:
+        # Calculate the mean of the column in the training data
+        mean_value = X_train[col].mean()
+        
+        # Impute missing values in both datasets
+        X_train[col].fillna(mean_value, inplace=True)
+        X_val[col].fillna(mean_value, inplace=True)
+
+    return X_train, X_val
+
+def impute_mode_categorical(X_train, X_val):
+    """
+    Impute missing values for categorical variables with the mode of the training data.
+    
+    """
+    # Identify categorical variables
+    categorical_columns = X_train.select_dtypes(exclude=['float64', 'int64']).columns
+
+    for col in categorical_columns:
+        # Calculate the mode of the column in the training data
+        mode_value = X_train[col].mode()[0]  # Mode can return multiple values; take the first
+        
+        # Impute missing values in both datasets
+        X_train[col].fillna(mode_value, inplace=True)
+        X_val[col].fillna(mode_value, inplace=True)
+
+    return X_train, X_val
 
