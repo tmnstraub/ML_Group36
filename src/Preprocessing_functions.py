@@ -44,6 +44,12 @@ def convert_to_timestamp(X_train, X_val, columns):
         X_val[col].apply(lambda x: x.timestamp() if pd.notnull(x) else np.nan)
     return X_train, X_val
 
+#function to transform Y and N into boolean while preserving the NaNs
+def convert_to_bool(df, col_names):
+    for col_name in col_names:
+        df[col_name] = df[col_name].map({'Y': True, 'N': False, np.nan: np.nan})
+    return df
+
 # Create new features based on the binned groups of the original features
 def newFeature_binnedGroups(X_train, X_val, X_test, columns, bins=4):
     '''
