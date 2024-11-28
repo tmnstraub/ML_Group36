@@ -12,6 +12,7 @@ from sklearn.calibration import LabelEncoder
 from sklearn.preprocessing import OrdinalEncoder
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.preprocessing import StandardScaler
+from sklearn.feature_selection import RFE, RFECV
 
 CODE_COLUMNS = ['Industry Code', 'WCIO Cause of Injury Code',
        'WCIO Nature of Injury Code', 'WCIO Part Of Body Code']
@@ -19,6 +20,29 @@ CODE_COLUMNS = ['Industry Code', 'WCIO Cause of Injury Code',
 DESCRIPTION_COLUMNS = ['WCIO Cause of Injury Description', 
                        'WCIO Nature of Injury Description','WCIO Part Of Body Description',
                        'Industry Code Description']
+
+# convert all date columns to datetime format
+def convert_to_datetime(X_train, X_val, columns):
+    '''
+    Convert all columns to datetime format
+    '''
+    for col in columns:
+        X_train[col] = pd.to_datetime(X_train[col], errors='coerce')
+        X_val[col] = pd.to_datetime(X_val[col], errors='coerce')
+    return X_train, X_val
+
+# Convert all columns to timestemp format
+def convert_to_timestamp(X_train, X_val, columns):
+    '''
+    Convert all columns to timestamp format
+    '''
+    for col in columns:
+        X_train[col] = pd.to_datetime(X_train[col], errors='coerce')
+        X_val[col] = pd.to_datetime(X_val[col], errors='coerce')    
+
+        X_train[col].apply(lambda x: x.timestamp() if pd.notnull(x) else np.nan)
+        X_val[col].apply(lambda x: x.timestamp() if pd.notnull(x) else np.nan)
+    return X_train, X_val
 
 # Create new features based on the binned groups of the original features
 def newFeature_binnedGroups(X_train, X_val, X_test, columns, bins=4):
@@ -349,3 +373,71 @@ def drop_description_columns(X_train, X_val):
 
     return X_train, X_val
 
+def feature_selection_rfe(X_train, y_train, n_features, model):
+    """
+    Applies Recursive Feature Elimination (RFE) for feature selection.
+
+    Parameters:
+    - model: The base model for RFE (e.g., RandomForestClassifier, LogisticRegression).
+    - X_train: Training features.
+    - y_train: Training labels.
+    - n_features: Number of features to select.
+
+    Returns:
+    - X_train_selected: Transformed training features with selected features.
+    - selected_features: List of selected feature names.
+    - feature_ranking: Pandas DataFrame with feature names and their rankings.
+    """
+    rfe = RFE(estimator=model, n_features_to_select=n_features)
+    X_train_selected = rfe.fit_transform(X_train, y_train)
+
+    # Extract feature rankings
+    feature_ranking = pd.DataFrame({
+        'Feature': X_train.columns,
+        'Ranking': rfe.ranking_
+    }).sort_values(by='Ranking')
+
+    # Get selected feature names
+    selected_features = feature_ranking[feature_ranking['Ranking'] == 1]['Feature'].tolist()
+
+    return X_train_selected, selected_features, feature_ranking
+
+
+def feature_selection_rfecv(X_train, y_train, model, cv_folds=5, scoring='accuracy'):
+    """
+    Applies Recursive Feature Elimination with Cross-Validation (RFECV) for feature selection.
+
+    Parameters:
+    - model: The base model for RFECV (e.g., RandomForestClassifier, LogisticRegression).
+    - X_train: Training features as a Pandas DataFrame.
+    - y_train: Training labels.
+    - cv_folds: Number of cross-validation folds (default: 5).
+    - scoring: Scoring metric for cross-validation (default: 'accuracy').
+
+    Returns:
+    - X_train_selected: Transformed training features with selected features.
+    - selected_features: List of selected feature names.
+    - feature_ranking: Pandas DataFrame with feature names and their rankings.
+    - optimal_num_features: Optimal number of features determined by RFECV.
+    """
+    # Initialize RFECV
+    rfecv = RFECV(estimator=model, step=1, cv=cv_folds, scoring=scoring)
+    rfecv.fit(X_train, y_train)
+
+    # Extract feature rankings
+    feature_ranking = pd.DataFrame({
+        'Feature': X_train.columns,
+        'Ranking': rfecv.ranking_,
+        'Support': rfecv.support_
+    }).sort_values(by='Ranking')
+
+    # Get selected feature names
+    selected_features = feature_ranking[feature_ranking['Support'] == True]['Feature'].tolist()
+
+    # Transform X_train to include only selected features
+    X_train_selected = X_train[selected_features]
+
+    # Get optimal number of features
+    optimal_num_features = rfecv.n_features_
+
+    return X_train_selected, selected_features, feature_ranking, optimal_num_features
