@@ -21,6 +21,8 @@ DESCRIPTION_COLUMNS = ['WCIO Cause of Injury Description',
                        'WCIO Nature of Injury Description','WCIO Part Of Body Description',
                        'Industry Code Description']
 
+BOOLEAN_COLUMNS = ['Alternative Dispute Resolution', 'Attorney/Representative','COVID-19 Indicator']
+
 # convert all date columns to datetime format
 def convert_to_datetime(X_train, X_val, columns):
     '''
@@ -45,10 +47,19 @@ def convert_to_timestamp(X_train, X_val, columns):
     return X_train, X_val
 
 #function to transform Y and N into boolean while preserving the NaNs
-def convert_to_bool(df, col_names):
+def convert_to_bool(X_train, X_val, col_names=BOOLEAN_COLUMNS):
+    '''
+    Convert 'Y' and 'N' to True and False respectively while preserving NaNs
+
+    Parameters:
+    X_train: DataFrame
+    X_val: DataFrame
+    col_names: list default: BOOLEAN_COLUMNS
+    '''
     for col_name in col_names:
-        df[col_name] = df[col_name].map({'Y': True, 'N': False, np.nan: np.nan})
-    return df
+        X_train[col_name] = X_train[col_name].map({'Y': True, 'N': False, np.nan: np.nan})
+        X_val[col_name] = X_val[col_name].map({'Y': True, 'N': False, np.nan: np.nan})
+    return X_train, X_val
 
 # Create new features based on the binned groups of the original features
 def newFeature_binnedGroups(X_train, X_val, X_test, columns, bins=4):
@@ -60,7 +71,7 @@ def newFeature_binnedGroups(X_train, X_val, X_test, columns, bins=4):
     X_val: DataFrame
     X_test: DataFrame
     columns: list
-    bins: int
+    bins: int default: 4
     '''
 
     for col in columns:
