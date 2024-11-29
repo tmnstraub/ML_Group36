@@ -343,11 +343,10 @@ def fill_missing_codes_description_based(X_train, X_val):
        
        # Extract the numpy array for the current code column
        X_train_most_frequent_array = X_train_most_frequent_codes[code_col]
-       X_val_most_frequent_array = X_val_most_frequent_codes[code_col]
-
+       
        # Map description values to their most frequent codes using numpy indexing
        X_train_description_to_code = {desc: code for desc, code in X_train_most_frequent_array}
-       X_val_description_to_code = {desc: code for desc, code in X_val_most_frequent_array}
+       X_val_description_to_code = {desc: code for desc, code in X_train_most_frequent_array}
 
        # Fill missing values in the DataFrame using numpy structure
        X_train[code_col] = X_train.apply(
