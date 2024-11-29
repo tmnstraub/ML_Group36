@@ -265,6 +265,19 @@ def remove_outliers_iqr(X_train, X_val, columns):
 
     return X_train, X_val
 
+def convert_dates_to_timestamps(df):
+    # Create a copy to avoid modifying the original DataFrame
+    df = df.copy()
+
+    for col in df.columns:
+        if 'Date' in col:
+            # Convert the column to datetime, coerce invalid parsing to NaT
+            df[col] = pd.to_datetime(df[col], errors='coerce')
+
+        #Convert to timestamp only for valid datetime values
+            df[col] = df[col].apply(lambda x: x.timestamp() if pd.notnull(x) else np.nan)
+
+    return df
 
 
 def impute_mean_numerical(X_train, X_val):
@@ -362,6 +375,116 @@ def fill_missing_codes_description_based(X_train, X_val):
        X_val = X_val.infer_objects(copy = False)
 
        return X_train, X_val
+   
+def fillna_zip_code(X_train, X_val):
+    """
+    Fills missing 'Zip Code' values in train and validation datasets based on modes.
+    first if their is a conty of injury and district name match then fill with mode zip code
+    if not fill with mode zip code of district name
+    """
+    # Save original indices
+    original_index_train = X_train.index
+    original_index_val = X_val.index
+
+    # Calculate mode Zip Codes for each group in X_train
+    mode_zip_codes_train = (
+        X_train.groupby(['County of Injury', 'District Name'])['Zip Code']
+        .agg(lambda x: x.mode().iloc[0] if not x.mode().empty else None)
+        .reset_index()
+    )
+    mode_zip_district_train = (
+        X_train.groupby('District Name')['Zip Code']
+        .agg(lambda x: x.mode().iloc[0] if not x.mode().empty else None)
+        .reset_index()
+    )
+    mode_zip_district_train.columns = ['District Name', 'Zip Code_mode_district']
+
+    # Define a helper function for filling missing Zip Codes
+    def fill_zip_codes(dataset):
+        # Merge with mode_zip_codes based on County of Injury and District Name
+        dataset = dataset.merge(
+            mode_zip_codes_train,
+            on=['County of Injury', 'District Name'],
+            how='left',
+            suffixes=('', '_mode')
+        )
+
+        # Fill missing Zip Code values with the mode from X_train
+        dataset['Zip Code'] = dataset['Zip Code'].combine_first(dataset['Zip Code_mode'])
+
+        # Merge with mode_zip_district for District Name fallback
+        dataset = dataset.merge(
+            mode_zip_district_train,
+            on='District Name',
+            how='left'
+        )
+
+        # Fill remaining missing Zip Code values with District Name mode
+        dataset['Zip Code'] = dataset['Zip Code'].combine_first(dataset['Zip Code_mode_district'])
+
+        # Drop the added columns
+        dataset.drop(columns=['Zip Code_mode', 'Zip Code_mode_district'], inplace=True)
+
+        return dataset
+
+    # Apply the helper function to each dataset
+    X_val = fill_zip_codes(X_val)
+    X_train = fill_zip_codes(X_train)
+
+    # Restore original indices
+    X_train.index = original_index_train
+    X_val.index = original_index_val
+
+    return X_train, X_val
+
+def fillnan_accident_date(X_train,X_val):
+    """
+    this function fills the missing values in the 'Accident Date' column with the mean difference between 'C-2 Date' and 'Accident Date'
+    """
+    X_train['time_diff C2 accident'] = X_train['Accident Date']-X_train['C-2 Date']
+
+    mean_difference_c2_accident = X_train['time_diff C2 accident'].mean()
+    
+    X_train['Accident Date'].fillna(X_train['C-2 Date'] - mean_difference_c2_accident, inplace=True)
+    X_val['Accident Date'].fillna(X_val['C-2 Date'] - mean_difference_c2_accident, inplace=True)
+    return X_train, X_val
+
+def fillnan_birth_year(X_train, X_val):
+    def process_birth_year_columns(df):
+        """
+        this function processes the 'Birth Year' column by filling NaN values with calculated birth years in seconds
+        """
+        accident_col = df['Accident Date'].copy()
+        # Replace 0.0 values with NaN in 'Birth Year'
+        df['Birth Year'] = df['Birth Year'].replace(0.0, np.nan)
+
+        # Ensure 'Accident Date' is in datetime format
+        accident_col = pd.to_datetime(accident_col, errors='coerce')
+
+        # Fill NaN values with calculated birth years in seconds
+        if df['Birth Year'].isna().any():
+            # Calculate the birth year by subtracting 'Age at Injury' (converted to years * 365.25 days) from 'Accident Date'
+            calculated_birth_years = accident_col - pd.to_timedelta(df['Age at Injury'] * 365.25, unit='D')
+
+            # Extract the year from the resulting date
+            df['Birth Year'].fillna(calculated_birth_years.dt.year, inplace=True)
+
+        # Ensure 'Birth Year' is numeric (in case it was converted to datetime)
+        df['Birth Year'] = pd.to_numeric(df['Birth Year'], errors='coerce')
+
+        # Convert the 'Birth Year' to datetime using the first day of the year (01-01)
+        df['Birth Year'] = pd.to_datetime(df['Birth Year'], format='%Y', errors='coerce')
+
+        # Convert to Unix timestamp using timestamp() method
+        df['Birth Year'] = df['Birth Year'].apply(lambda x: x.timestamp() if pd.notnull(x) else None)
+
+        return df
+    """
+    this apply the function just above to the train and validation data
+    """
+    X_train = process_birth_year_columns(X_train)
+    X_val = process_birth_year_columns(X_val)
+    return X_train, X_val
     
 def fill_missing_with_mode(X_train, X_val):
     '''
@@ -387,6 +510,13 @@ def drop_description_columns(X_train, X_val):
     X_train = X_train.drop(DESCRIPTION_COLUMNS, axis=1)
     X_val = X_val.drop(DESCRIPTION_COLUMNS, axis=1)
 
+    return X_train, X_val
+
+def feature_creation_has_Cdate (X_train, X_val):
+    X_train['Has C-3 Date'] = X_train['C-3 Date'].apply(lambda x: 0 if pd.isna(x) else 1)
+    X_val['Has C-3 Date'] = X_val['C-3 Date'].apply(lambda x: 0 if pd.isna(x) else 1)
+    X_train['Has C-2 Date'] = X_train['C-2 Date'].apply(lambda x: 0 if pd.isna(x) else 1)
+    X_val['Has C-2 Date'] = X_val['C-2 Date'].apply(lambda x: 0 if pd.isna(x) else 1)
     return X_train, X_val
 
 def feature_selection_rfe(X_train, y_train, n_features, model):
