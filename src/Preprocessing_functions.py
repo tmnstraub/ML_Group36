@@ -8,6 +8,7 @@ import scipy.stats as stats
 from scipy.stats import chi2_contingency
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MinMaxScaler
+from sklearn.impute import KNNImputer
 from sklearn.calibration import LabelEncoder
 from sklearn.preprocessing import OrdinalEncoder
 from sklearn.preprocessing import OneHotEncoder
@@ -615,3 +616,69 @@ def feature_selection_rfecv(X_train, y_train, model, cv_folds=5, scoring='accura
     optimal_num_features = rfecv.n_features_
 
     return X_train_selected, selected_features, feature_ranking, optimal_num_features
+
+# KNN Imputer
+def impute_missing_with_knn(X_train, X_val, X_test, n_neighbors=5):
+    """
+    Imputes missing values in the datasets using KNNImputer.
+    
+    Parameters:
+    - X_train: Training dataset (Pandas DataFrame)
+    - X_val: Validation dataset (Pandas DataFrame)
+    - X_test: Test dataset (Pandas DataFrame)
+    - n_neighbors: Number of neighbors for KNN imputer (default=5)
+    
+    Returns:
+    - X_train_imputed: Training dataset after imputation
+    - X_val_imputed: Validation dataset after imputation
+    - X_test_imputed: Test dataset after imputation
+    """
+    # Step 1: Copy datasets to avoid modifying originals
+    X_train_knn = X_train.copy()
+    X_val_knn = X_val.copy()
+    X_test_knn = X_test.copy()
+
+    # Step 2: Handle specific column 'IME-4 Count'
+    for dataset in [X_train_knn, X_val_knn, X_test_knn]:
+        dataset["IME-4 Count"].fillna(0, inplace=True)
+    
+    # Step 3: Identify Columns with Missing Values
+    missing_columns = X_train_knn.columns[X_train_knn.isnull().any()]
+    print("Columns with missing values:", missing_columns)
+
+    # Step 4: Ensure consistent encoding for all categorical columns
+    datasets = {'train': X_train_knn, 'val': X_val_knn, 'test': X_test_knn}
+    label_encoders = {}  # Store encoders for each column
+
+    for column in X_train_knn.columns:
+        # Check if the column contains categorical data
+        if X_train_knn[column].dtype == 'object' or X_train_knn[column].apply(lambda x: isinstance(x, str)).any():
+            # Initialize and fit Label Encoder
+            le = LabelEncoder()
+            X_train_knn[column] = X_train_knn[column].astype(str)
+            X_train_knn[column] = le.fit_transform(X_train_knn[column])
+            
+            # Store encoder for future use
+            label_encoders[column] = le
+            
+            # Apply encoder to validation and test sets
+            for name in ['val', 'test']:
+                datasets[name][column] = datasets[name][column].astype(str).apply(
+                    lambda x: x if x in le.classes_ else np.nan)
+                le.classes_ = np.append(le.classes_, np.nan)  # Add NaN as a class
+                datasets[name][column] = le.transform(datasets[name][column])
+
+    # Step 5: Apply KNN Imputer
+    imputer = KNNImputer(n_neighbors=n_neighbors, weights="uniform", metric="nan_euclidean")
+    print("Applying KNN imputer...")
+
+    X_train_imputed = pd.DataFrame(imputer.fit_transform(X_train_knn), columns=X_train_knn.columns)
+    X_val_imputed = pd.DataFrame(imputer.transform(X_val_knn), columns=X_val_knn.columns)
+    X_test_imputed = pd.DataFrame(imputer.transform(X_test_knn), columns=X_test_knn.columns)
+    print("Imputation completed on training, validation, and test sets.")
+    X_train_imputed, X_val_imputed, X_test_imputed = impute_missing_with_knn(X_train, X_val, X_test, n_neighbors=5)
+    return X_train_imputed, X_val_imputed, X_test_imputed
+
+
+
+
