@@ -280,15 +280,13 @@ def convert_dates_to_timestamps(df):
     return df
 
 
-def impute_mean_numerical(X_train, X_val):
+def impute_mean_numerical(X_train, X_val, columns):
     """
     Impute missing values for continuous (numerical) variables with the mean of the training data.
     
     """
-    # Identify numerical variables
-    continuous_columns = X_train.select_dtypes(include=['float64', 'int64']).columns
 
-    for col in continuous_columns:
+    for col in columns:
         # Calculate the mean of the column in the training data
         mean_value = X_train[col].mean()
         
@@ -298,15 +296,13 @@ def impute_mean_numerical(X_train, X_val):
 
     return X_train, X_val
 
-def impute_mode_categorical(X_train, X_val):
+def impute_mode_categorical(X_train, X_val, columns):
     """
     Impute missing values for categorical variables with the mode of the training data.
     
     """
-    # Identify categorical variables
-    categorical_columns = X_train.select_dtypes(exclude=['float64', 'int64']).columns
 
-    for col in categorical_columns:
+    for col in columns:
         # Calculate the mode of the column in the training data
         mode_value = X_train[col].mode()[0]  # Mode can return multiple values; take the first
         
