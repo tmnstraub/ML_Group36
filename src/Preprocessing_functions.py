@@ -326,7 +326,11 @@ def compute_most_frequent_code_per_description(df, code_columns):
     results = {}
 
     for code_col in code_columns:
-        description_col = code_col.replace('code', 'description')
+        if code_col != 'Industry Code':
+            
+            description_col = code_col.replace('Code', 'Description')
+        else:
+            description_col = 'Industry Code Description'
         
         # Calculate most frequent code for each unique description
         most_frequent_code_series = (
@@ -359,17 +363,45 @@ def fill_missing_codes_description_based(X_train, X_val):
        
        # Map description values to their most frequent codes using numpy indexing
        X_train_description_to_code = {desc: code for desc, code in X_train_most_frequent_array}
-       X_val_description_to_code = {desc: code for desc, code in X_train_most_frequent_array}
 
-       # Fill missing values in the DataFrame using numpy structure
+       # Fill missing values in the DataFrame (X_train) using the mapping derived from X_train.
        X_train[code_col] = X_train.apply(
-              lambda row: X_train_description_to_code.get(row[code_col.replace('code', 'description')], row[code_col]),
-              axis=1
-         )
+          lambda row: (
+              # Look up the most frequent code for the description in the mapping (X_train_description_to_code).
+              # If a matching description is found in the mapping, use its associated code.
+              X_train_description_to_code.get(row[code_col.replace('Code', 'Description')], row[code_col])
+              if (
+                  # Only fill the value if the current code is missing (NaN)...
+                  pd.isna(row[code_col])
+                  # ...and the corresponding description is NOT missing (NaN).
+                  and not pd.isna(row[code_col.replace('Code', 'Description')])
+              )
+              # If the conditions aren't met, keep the original value of the code column.
+              else row[code_col]
+          ),
+          # Apply the function row-wise across the DataFrame.
+          axis=1
+       )
+
+       # Fill missing values in the DataFrame (X_val) using the mapping derived from X_train.
        X_val[code_col] = X_val.apply(
-            lambda row: X_val_description_to_code.get(row[code_col.replace('code', 'description')], row[code_col]),
-            axis=1
-         )
+           lambda row: (
+               # Look up the most frequent code for the description in the mapping (X_train_description_to_code).
+               # This ensures that X_val is filled based on the same mapping as X_train, avoiding data leakage.
+               X_train_description_to_code.get(row[code_col.replace('Code', 'Description')], row[code_col])
+               if (
+                   # Only fill the value if the current code is missing (NaN)...
+                   pd.isna(row[code_col])
+                   # ...and the corresponding description is NOT missing (NaN).
+                   # Missing codes with missing descriptions will be filled with mode later.
+                   and not pd.isna(row[code_col.replace('Code', 'Description')])
+               )
+               # If the conditions aren't met, keep the original value of the code column.
+               else row[code_col]
+           ),
+           # Apply the function row-wise across the DataFrame.
+           axis=1
+       )
 
        X_train = X_train.infer_objects(copy = False) 
        X_val = X_val.infer_objects(copy = False)
