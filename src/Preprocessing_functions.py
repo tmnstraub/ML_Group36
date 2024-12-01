@@ -37,14 +37,15 @@ def convert_to_datetime(X_train, X_val, columns):
 # Convert all columns to timestemp format
 def convert_to_timestamp(X_train, X_val, columns):
     '''
-    Convert all columns to timestamp format
+    Convert all specified columns in X_train and X_val to timestamp format.
     '''
     for col in columns:
         X_train[col] = pd.to_datetime(X_train[col], errors='coerce')
-        X_val[col] = pd.to_datetime(X_val[col], errors='coerce')    
-
-        X_train[col].apply(lambda x: x.timestamp() if pd.notnull(x) else np.nan)
-        X_val[col].apply(lambda x: x.timestamp() if pd.notnull(x) else np.nan)
+        X_val[col] = pd.to_datetime(X_val[col], errors='coerce')
+        
+        X_train[col] = X_train[col].apply(lambda x: x.timestamp() if pd.notnull(x) else np.nan)
+        X_val[col] = X_val[col].apply(lambda x: x.timestamp() if pd.notnull(x) else np.nan)
+    
     return X_train, X_val
 
 #function to transform Y and N into boolean while preserving the NaNs
@@ -476,6 +477,7 @@ def fillnan_accident_date(X_train,X_val):
     
     X_train['Accident Date'].fillna(X_train['C-2 Date'] - mean_difference_c2_accident, inplace=True)
     X_val['Accident Date'].fillna(X_val['C-2 Date'] - mean_difference_c2_accident, inplace=True)
+    
     return X_train, X_val
 
 def fillnan_birth_year(X_train, X_val):
@@ -546,6 +548,8 @@ def feature_creation_has_Cdate (X_train, X_val):
     X_val['Has C-3 Date'] = X_val['C-3 Date'].apply(lambda x: 0 if pd.isna(x) else 1)
     X_train['Has C-2 Date'] = X_train['C-2 Date'].apply(lambda x: 0 if pd.isna(x) else 1)
     X_val['Has C-2 Date'] = X_val['C-2 Date'].apply(lambda x: 0 if pd.isna(x) else 1)
+    X_train['Has First Hearing Date'] = X_train['C-2 Date'].apply(lambda x: 0 if pd.isna(x) else 1)
+    X_val['HasFirst Hearing Date'] = X_val['C-2 Date'].apply(lambda x: 0 if pd.isna(x) else 1)
     return X_train, X_val
 
 def feature_selection_rfe(X_train, y_train, n_features, model):
