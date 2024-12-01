@@ -202,14 +202,28 @@ def encoding_onehot(X_train, X_val, columns):
     '''
     OneHot Encoder for categorical variables with low cardinality
     '''
-    # Changing datatype to string for encoding
+    X_train = X_train.copy()
+    X_val = X_val.copy()
+    
     X_train[columns] = X_train[columns].astype(str)
     X_val[columns] = X_val[columns].astype(str)
-
+    
     ohe = OneHotEncoder(sparse_output=False, handle_unknown='ignore')
     X_train_encoded = pd.DataFrame(ohe.fit_transform(X_train[columns]))
     X_val_encoded = pd.DataFrame(ohe.transform(X_val[columns]))
-    return X_train_encoded, X_val_encoded
+    
+    columns_encoded = ohe.get_feature_names_out(columns)
+    X_train_encoded.columns = columns_encoded
+    X_val_encoded.columns = columns_encoded
+    X_train_encoded.index = X_train.index
+    X_val_encoded.index = X_val.index
+    
+    X_train_rest = X_train.drop(columns, axis=1)
+    X_val_rest = X_val.drop(columns, axis=1)
+    X_train_final = pd.concat([X_train_rest, X_train_encoded], axis=1)
+    X_val_final = pd.concat([X_val_rest, X_val_encoded], axis=1)
+    
+    return X_train_final, X_val_final
 
 # Frequency Encoding for categorical variables with high cardinality -> not filling unseen values
 def encoding_frequency1(X_train, X_val, columns):
