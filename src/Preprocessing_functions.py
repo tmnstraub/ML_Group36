@@ -170,17 +170,22 @@ def outliers_specific(X_train, X_val, columns, lower_bound=None, upper_bound=Non
 
 # MinMax Scaler
 def scaling_minmax(X_train, X_val, columns):
-    scaler = MinMaxScaler()
-    X_train_scaled = pd.DataFrame(scaler.fit_transform(X_train), columns=columns)
-    X_val_scaled = pd.DataFrame(scaler.transform(X_val), columns=columns)
-    return X_train_scaled, X_val_scaled
 
-# Standard Scaler
+    scaler = MinMaxScaler()
+
+    X_train[columns] = scaler.fit_transform(X_train[columns])
+    X_val[columns] = scaler.transform(X_val[columns])
+    
+    return X_train, X_val
+
 def scaling_standard(X_train, X_val, columns):
+
     scaler = StandardScaler()
-    X_train_scaled = pd.DataFrame(scaler.fit_transform(X_train), columns=columns)
-    X_val_scaled = pd.DataFrame(scaler.transform(X_val), columns=columns)
-    return X_train_scaled, X_val_scaled
+
+    X_train[columns] = scaler.fit_transform(X_train[columns])
+    X_val[columns] = scaler.transform(X_val[columns])
+    
+    return X_train, X_val
 
 # Label Encoder for target variable
 def encoding_label(y_train, y_val):
