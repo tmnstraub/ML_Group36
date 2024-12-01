@@ -24,6 +24,18 @@ DESCRIPTION_COLUMNS = ['WCIO Cause of Injury Description',
 
 BOOLEAN_COLUMNS = ['Alternative Dispute Resolution', 'Attorney/Representative','COVID-19 Indicator']
 
+
+
+# Drop empty rows
+def drop_empty_rows(X_train, X_val):
+    '''
+    Drop empty rows in the dataset where only Assembly Date is filled
+    '''
+    X_train = X_train[~(X_train.drop(columns=['Assembly Date']).isna().all(axis=1) & X_train['Assembly Date'].notna())]
+    X_val = X_val[~(X_val.drop(columns=['Assembly Date']).isna().all(axis=1) & X_val['Assembly Date'].notna())]
+
+    return X_train, X_val
+
 # convert all date columns to datetime format
 def convert_to_datetime(X_train, X_val, columns):
     '''
