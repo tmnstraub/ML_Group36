@@ -477,7 +477,6 @@ def fillnan_accident_date(X_train,X_val):
     
     X_train['Accident Date'].fillna(X_train['C-2 Date'] - mean_difference_c2_accident, inplace=True)
     X_val['Accident Date'].fillna(X_val['C-2 Date'] - mean_difference_c2_accident, inplace=True)
-    
     return X_train, X_val
 
 def fillnan_birth_year(X_train, X_val):
