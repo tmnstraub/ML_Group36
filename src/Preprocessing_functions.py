@@ -256,7 +256,6 @@ def encoding_frequency1(X_train, X_val, columns):
     
     return X_train_final, X_val_final
 
-
 def encoding_frequency2(X_train, X_val, columns):
     '''
     Frequency Encoding for categorical variables with high cardinality -> filling unseen values
