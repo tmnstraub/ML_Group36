@@ -1,4 +1,3 @@
-#Importing Libraries
 
 import pandas as pd
 import seaborn as sns
@@ -37,14 +36,15 @@ def convert_to_datetime(X_train, X_val, columns):
 # Convert all columns to timestemp format
 def convert_to_timestamp(X_train, X_val, columns):
     '''
-    Convert all columns to timestamp format
+    Convert all specified columns in X_train and X_val to timestamp format.
     '''
     for col in columns:
         X_train[col] = pd.to_datetime(X_train[col], errors='coerce')
-        X_val[col] = pd.to_datetime(X_val[col], errors='coerce')    
-
-        X_train[col].apply(lambda x: x.timestamp() if pd.notnull(x) else np.nan)
-        X_val[col].apply(lambda x: x.timestamp() if pd.notnull(x) else np.nan)
+        X_val[col] = pd.to_datetime(X_val[col], errors='coerce')
+        
+        X_train[col] = X_train[col].apply(lambda x: x.timestamp() if pd.notnull(x) else np.nan)
+        X_val[col] = X_val[col].apply(lambda x: x.timestamp() if pd.notnull(x) else np.nan)
+    
     return X_train, X_val
 
 #function to transform Y and N into boolean while preserving the NaNs
@@ -169,17 +169,22 @@ def outliers_specific(X_train, X_val, columns, lower_bound=None, upper_bound=Non
 
 # MinMax Scaler
 def scaling_minmax(X_train, X_val, columns):
-    scaler = MinMaxScaler()
-    X_train_scaled = pd.DataFrame(scaler.fit_transform(X_train), columns=columns)
-    X_val_scaled = pd.DataFrame(scaler.transform(X_val), columns=columns)
-    return X_train_scaled, X_val_scaled
 
-# Standard Scaler
+    scaler = MinMaxScaler()
+
+    X_train[columns] = scaler.fit_transform(X_train[columns])
+    X_val[columns] = scaler.transform(X_val[columns])
+    
+    return X_train, X_val
+
 def scaling_standard(X_train, X_val, columns):
+
     scaler = StandardScaler()
-    X_train_scaled = pd.DataFrame(scaler.fit_transform(X_train), columns=columns)
-    X_val_scaled = pd.DataFrame(scaler.transform(X_val), columns=columns)
-    return X_train_scaled, X_val_scaled
+
+    X_train[columns] = scaler.fit_transform(X_train[columns])
+    X_val[columns] = scaler.transform(X_val[columns])
+    
+    return X_train, X_val
 
 # Label Encoder for target variable
 def encoding_label(y_train, y_val):
@@ -196,31 +201,60 @@ def encoding_onehot(X_train, X_val, columns):
     '''
     OneHot Encoder for categorical variables with low cardinality
     '''
-    # Changing datatype to string for encoding
+    X_train = X_train.copy()
+    X_val = X_val.copy()
+    
     X_train[columns] = X_train[columns].astype(str)
     X_val[columns] = X_val[columns].astype(str)
-
+    
     ohe = OneHotEncoder(sparse_output=False, handle_unknown='ignore')
     X_train_encoded = pd.DataFrame(ohe.fit_transform(X_train[columns]))
     X_val_encoded = pd.DataFrame(ohe.transform(X_val[columns]))
-    return X_train_encoded, X_val_encoded
+    
+    columns_encoded = ohe.get_feature_names_out(columns)
+    X_train_encoded.columns = columns_encoded
+    X_val_encoded.columns = columns_encoded
+    X_train_encoded.index = X_train.index
+    X_val_encoded.index = X_val.index
+    
+    X_train_rest = X_train.drop(columns, axis=1)
+    X_val_rest = X_val.drop(columns, axis=1)
+    X_train_final = pd.concat([X_train_rest, X_train_encoded], axis=1)
+    X_val_final = pd.concat([X_val_rest, X_val_encoded], axis=1)
+    
+    return X_train_final, X_val_final
 
 # Frequency Encoding for categorical variables with high cardinality -> not filling unseen values
 def encoding_frequency1(X_train, X_val, columns):
     '''
     Frequency Encoding for categorical variables with high cardinality -> not filling unseen values
     '''
+    X_train = X_train.copy()
+    X_val = X_val.copy()
+    
     for col in columns:
-        # Changing datatype to string for encoding
         X_train[col] = X_train[col].astype(str)
         X_val[col] = X_val[col].astype(str)
+    
+    fe_dict = {}
+    for col in columns:
+        fe_dict[col] = X_train.groupby(col).size() / len(X_train)
+        
+        X_train[col] = X_train[col].apply(lambda x: fe_dict[col].get(x, 0))  
+        X_val[col] = X_val[col].apply(lambda x: fe_dict[col].get(x, 0))  
+    
 
-        fe = X_train.groupby(col).size() / len(X_train)
-        X_train[col] = X_train[col].apply(lambda x : fe[x])
-        X_val[col] = X_val[col].apply(lambda x : fe[x])
-    return X_train, X_val
+    X_train_rest = X_train.drop(columns, axis=1)
+    X_val_rest = X_val.drop(columns, axis=1)
+    
+    X_train_final = pd.concat([X_train_rest, X_train[columns]], axis=1)
+    X_val_final = pd.concat([X_val_rest, X_val[columns]], axis=1)
+    
+    X_train_final.index = X_train.index
+    X_val_final.index = X_val.index
+    
+    return X_train_final, X_val_final
 
-# Frequency Encoding for categorical variables with high cardinality -> filling unseen values
 def encoding_frequency2(X_train, X_val, columns):
     '''
     Frequency Encoding for categorical variables with high cardinality -> filling unseen values
@@ -546,6 +580,8 @@ def feature_creation_has_Cdate (X_train, X_val):
     X_val['Has C-3 Date'] = X_val['C-3 Date'].apply(lambda x: 0 if pd.isna(x) else 1)
     X_train['Has C-2 Date'] = X_train['C-2 Date'].apply(lambda x: 0 if pd.isna(x) else 1)
     X_val['Has C-2 Date'] = X_val['C-2 Date'].apply(lambda x: 0 if pd.isna(x) else 1)
+    X_train['Has First Hearing Date'] = X_train['C-2 Date'].apply(lambda x: 0 if pd.isna(x) else 1)
+    X_val['HasFirst Hearing Date'] = X_val['C-2 Date'].apply(lambda x: 0 if pd.isna(x) else 1)
     return X_train, X_val
 
 def feature_selection_rfe(X_train, y_train, n_features, model):
@@ -679,5 +715,3 @@ def impute_missing_with_knn(X_train, X_val, X_test, n_neighbors=5):
     X_train_imputed, X_val_imputed, X_test_imputed = impute_missing_with_knn(X_train, X_val, X_test, n_neighbors=5)
     return X_train_imputed, X_val_imputed, X_test_imputed
 # use the code above to impute missing values in the dataset with using Knn imputer. 
-
-
