@@ -230,17 +230,33 @@ def encoding_frequency1(X_train, X_val, columns):
     '''
     Frequency Encoding for categorical variables with high cardinality -> not filling unseen values
     '''
+    X_train = X_train.copy()
+    X_val = X_val.copy()
+    
     for col in columns:
-        # Changing datatype to string for encoding
         X_train[col] = X_train[col].astype(str)
         X_val[col] = X_val[col].astype(str)
+    
+    fe_dict = {}
+    for col in columns:
+        fe_dict[col] = X_train.groupby(col).size() / len(X_train)
+        
+        X_train[col] = X_train[col].apply(lambda x: fe_dict[col].get(x, 0))  
+        X_val[col] = X_val[col].apply(lambda x: fe_dict[col].get(x, 0))  
+    
 
-        fe = X_train.groupby(col).size() / len(X_train)
-        X_train[col] = X_train[col].apply(lambda x : fe[x])
-        X_val[col] = X_val[col].apply(lambda x : fe[x])
-    return X_train, X_val
+    X_train_rest = X_train.drop(columns, axis=1)
+    X_val_rest = X_val.drop(columns, axis=1)
+    
+    X_train_final = pd.concat([X_train_rest, X_train[columns]], axis=1)
+    X_val_final = pd.concat([X_val_rest, X_val[columns]], axis=1)
+    
+    X_train_final.index = X_train.index
+    X_val_final.index = X_val.index
+    
+    return X_train_final, X_val_final
 
-# Frequency Encoding for categorical variables with high cardinality -> filling unseen values
+
 def encoding_frequency2(X_train, X_val, columns):
     '''
     Frequency Encoding for categorical variables with high cardinality -> filling unseen values
