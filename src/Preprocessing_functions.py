@@ -182,8 +182,13 @@ def outliers_specific(X_train, X_val, columns, lower_bound=None, upper_bound=Non
 # MinMax Scaler
 def scaling_minmax(X_train, X_val, columns):
     scaler = MinMaxScaler()
-    X_train_scaled = pd.DataFrame(scaler.fit_transform(X_train), columns=columns)
-    X_val_scaled = pd.DataFrame(scaler.transform(X_val), columns=columns)
+    
+    # Scale only specified columns
+    X_train_scaled = X_train.copy()
+    X_val_scaled = X_val.copy()
+    
+    X_train_scaled[columns] = scaler.fit_transform(X_train[columns])
+    X_val_scaled[columns] = scaler.transform(X_val[columns])
     return X_train_scaled, X_val_scaled
 
 # Standard Scaler
