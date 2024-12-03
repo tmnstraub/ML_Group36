@@ -582,7 +582,7 @@ def feature_creation_has_Cdate (X_train, X_val):
     X_train['Has C-2 Date'] = X_train['C-2 Date'].apply(lambda x: 0 if pd.isna(x) else 1)
     X_val['Has C-2 Date'] = X_val['C-2 Date'].apply(lambda x: 0 if pd.isna(x) else 1)
     X_train['Has First Hearing Date'] = X_train['C-2 Date'].apply(lambda x: 0 if pd.isna(x) else 1)
-    X_val['HasFirst Hearing Date'] = X_val['C-2 Date'].apply(lambda x: 0 if pd.isna(x) else 1)
+    X_val['Has First Hearing Date'] = X_val['C-2 Date'].apply(lambda x: 0 if pd.isna(x) else 1)
     return X_train, X_val
 
 def feature_selection_rfe(X_train, y_train, n_features, model):
