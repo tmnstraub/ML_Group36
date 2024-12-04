@@ -48,6 +48,17 @@ def convert_to_timestamp(X_train, X_val, columns):
     
     return X_train, X_val
 
+def convert_to_timestamp_test(X_test, columns):
+    '''
+    Convert all specified columns in X_train and X_val to timestamp format.
+    '''
+    for col in columns:
+        X_test[col] = pd.to_datetime(X_test[col], errors='coerce')
+        
+        X_test[col] = X_test[col].apply(lambda x: x.timestamp() if pd.notnull(x) else np.nan)
+    
+    return X_test
+
 #function to transform Y and N into boolean while preserving the NaNs
 def convert_to_bool(X_train, X_val, col_names=BOOLEAN_COLUMNS):
     '''
@@ -62,6 +73,19 @@ def convert_to_bool(X_train, X_val, col_names=BOOLEAN_COLUMNS):
         X_train[col_name] = X_train[col_name].map({'Y': True, 'N': False, np.nan: np.nan})
         X_val[col_name] = X_val[col_name].map({'Y': True, 'N': False, np.nan: np.nan})
     return X_train, X_val
+
+def convert_to_bool_test(X_test, col_names=BOOLEAN_COLUMNS):
+    '''
+    Convert 'Y' and 'N' to True and False respectively while preserving NaNs
+
+    Parameters:
+    X_train: DataFrame
+    X_val: DataFrame
+    col_names: list default: BOOLEAN_COLUMNS
+    '''
+    for col_name in col_names:
+        X_test[col_name] = X_test[col_name].map({'Y': True, 'N': False, np.nan: np.nan})
+    return X_test
 
 # Create new features based on the binned groups of the original features
 def newFeature_binnedGroups(X_train, X_val, X_test, columns, bins=4):
@@ -178,6 +202,14 @@ def scaling_minmax(X_train, X_val, columns):
     
     return X_train, X_val
 
+def scaling_minmax_test(X_test, columns):
+
+    scaler = MinMaxScaler()
+
+    X_test[columns] = scaler.fit_transform(X_test[columns])
+    
+    return X_test
+
 def scaling_standard(X_train, X_val, columns):
 
     scaler = StandardScaler()
@@ -186,6 +218,14 @@ def scaling_standard(X_train, X_val, columns):
     X_val[columns] = scaler.transform(X_val[columns])
     
     return X_train, X_val
+
+def scaling_standard_test(X_test, columns):
+
+    scaler = StandardScaler()
+
+    X_test[columns] = scaler.fit_transform(X_test[columns])
+    
+    return X_test
 
 # Label Encoder for target variable
 def encoding_label(y_train, y_val):
@@ -225,6 +265,27 @@ def encoding_onehot(X_train, X_val, columns):
     
     return X_train_final, X_val_final
 
+def encoding_onehot_test(X_test, columns):
+    '''
+    OneHot Encoder for categorical variables with low cardinality
+    '''
+    X_test = X_test.copy()
+    
+    
+    X_test[columns] = X_test[columns].astype(str)
+    
+    ohe = OneHotEncoder(sparse_output=False, handle_unknown='ignore')
+    X_test_encoded = pd.DataFrame(ohe.fit_transform(X_test[columns]))
+    
+    columns_encoded = ohe.get_feature_names_out(columns)
+    X_test_encoded.columns = columns_encoded
+    X_test_encoded.index = X_test.index
+    
+    X_test_rest = X_test.drop(columns, axis=1)
+    X_test_final = pd.concat([X_test_rest, X_test_encoded], axis=1)
+    
+    return X_test_final
+
 # Frequency Encoding for categorical variables with high cardinality -> not filling unseen values
 def encoding_frequency1(X_train, X_val, columns):
     '''
@@ -255,6 +316,30 @@ def encoding_frequency1(X_train, X_val, columns):
     X_val_final.index = X_val.index
     
     return X_train_final, X_val_final
+
+def encoding_frequency1_test(X_test, columns):
+    '''
+    Frequency Encoding for categorical variables with high cardinality -> not filling unseen values
+    '''
+    X_test = X_test.copy()
+    
+    for col in columns:
+        X_test[col] = X_test[col].astype(str)
+    
+    fe_dict = {}
+    for col in columns:
+        fe_dict[col] = X_test.groupby(col).size() / len(X_test)
+        
+        X_test[col] = X_test[col].apply(lambda x: fe_dict[col].get(x, 0))  
+    
+
+    X_test_rest = X_test.drop(columns, axis=1)
+    
+    X_test_final = pd.concat([X_test_rest, X_test[columns]], axis=1)
+    
+    X_test_final.index = X_test.index
+    
+    return X_test_final
 
 def encoding_frequency2(X_train, X_val, columns):
     '''
@@ -331,6 +416,20 @@ def impute_mean_numerical(X_train, X_val, columns):
         X_val[col].fillna(mean_value, inplace=True)
 
     return X_train, X_val
+def impute_mean_numerical_test(X_test, columns):
+    """
+    Impute missing values for continuous (numerical) variables with the mean of the training data.
+    
+    """
+
+    for col in columns:
+        # Calculate the mean of the column in the training data
+        mean_value = X_test[col].mean()
+        
+        # Impute missing values in both datasets
+        X_test[col].fillna(mean_value, inplace=True)
+
+    return X_test
 
 def impute_mode_categorical(X_train, X_val, columns):
     """
@@ -565,6 +664,21 @@ def fill_missing_with_mode(X_train, X_val):
     X_val = X_val.infer_objects(copy=False)
 
     return X_train, X_val
+    
+def fill_missing_with_mode_test(X_test):
+    '''
+    Fill missing values with the mode of the column
+    '''
+    for col in CODE_COLUMNS:
+        # Get the mode (most frequent value)
+        mode = X_test[col].mode().iloc[0]
+
+        X_test.loc[:, col] = X_test[col].fillna(mode)
+    
+    X_test = X_test.infer_objects(copy=False)
+
+    return X_test
+
 
 def drop_description_columns(X_train, X_val):
     '''
@@ -576,6 +690,7 @@ def drop_description_columns(X_train, X_val):
 
     return X_train, X_val
 
+
 def feature_creation_has_Cdate (X_train, X_val):
     X_train['Has C-3 Date'] = X_train['C-3 Date'].apply(lambda x: 0 if pd.isna(x) else 1)
     X_val['Has C-3 Date'] = X_val['C-3 Date'].apply(lambda x: 0 if pd.isna(x) else 1)
@@ -584,6 +699,12 @@ def feature_creation_has_Cdate (X_train, X_val):
     X_train['Has First Hearing Date'] = X_train['C-2 Date'].apply(lambda x: 0 if pd.isna(x) else 1)
     X_val['Has First Hearing Date'] = X_val['C-2 Date'].apply(lambda x: 0 if pd.isna(x) else 1)
     return X_train, X_val
+
+def feature_creation_has_Cdate_test (X_test):
+    X_test['Has C-3 Date'] = X_test['C-3 Date'].apply(lambda x: 0 if pd.isna(x) else 1)
+    X_test['Has C-2 Date'] = X_test['C-2 Date'].apply(lambda x: 0 if pd.isna(x) else 1)
+    X_test['Has First Hearing Date'] = X_test['C-2 Date'].apply(lambda x: 0 if pd.isna(x) else 1)
+    return X_test
 
 def feature_selection_rfe(X_train, y_train, n_features, model):
     """
