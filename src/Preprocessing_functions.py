@@ -12,7 +12,7 @@ from sklearn.impute import KNNImputer
 from sklearn.calibration import LabelEncoder
 from sklearn.preprocessing import OrdinalEncoder
 from sklearn.preprocessing import OneHotEncoder
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import StandardScaler, RobustScaler
 from sklearn.feature_selection import RFE, RFECV
 
 CODE_COLUMNS = ['Industry Code', 'WCIO Cause of Injury Code',
@@ -218,6 +218,16 @@ def scaling_standard(X_train, X_val, columns):
     X_val[columns] = scaler.transform(X_val[columns])
     
     return X_train, X_val
+def robust_scaling(X_train, X_val, columns):
+    scaler= RobustScaler()
+    X_train[columns] = scaler.fit_transform(X_train[columns])
+    X_val[columns] = scaler.transform(X_val[columns])
+    return X_train, X_val
+
+def robust_scaling_test(X_test, columns):
+    scaler= RobustScaler()
+    X_test[columns] = scaler.fit_transform(X_test[columns])
+    return X_test
 
 def scaling_standard_test(X_test, columns):
 
@@ -234,7 +244,7 @@ def encoding_label(y_train, y_val):
     '''
     le = LabelEncoder()
     y_train_encoded = le.fit_transform(y_train)
-    y_val_encoded = le.transform(y_val)
+    y_val_encoded = le.fit_transform(y_val)
     return y_train_encoded, y_val_encoded
 
 # OneHot Encoder for categorical variables with low cardinality
