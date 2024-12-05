@@ -3,7 +3,7 @@ import joblib
 import pandas as pd
 
 # Carregar o modelo treinado
-model = joblib.load('Users\inesm\OneDrive\Documentos\GitHub\ML_Group36\src\xgboost_model.pkl')
+model = joblib.load('C:\\Users\\inesm\\OneDrive\\Documentos\\GitHub\\ML_Group36\\src\\xgboost_model.pkl')
 
 # Inicializar o Flask
 app = Flask(__name__)
