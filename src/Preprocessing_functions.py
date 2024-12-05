@@ -8,6 +8,7 @@ import scipy.stats as stats
 from scipy.stats import chi2_contingency
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import RobustScaler
 from sklearn.impute import KNNImputer
 from sklearn.calibration import LabelEncoder
 from sklearn.preprocessing import OrdinalEncoder
@@ -61,6 +62,28 @@ def convert_to_bool(X_train, X_val, col_names=BOOLEAN_COLUMNS):
     for col_name in col_names:
         X_train[col_name] = X_train[col_name].map({'Y': True, 'N': False, np.nan: np.nan})
         X_val[col_name] = X_val[col_name].map({'Y': True, 'N': False, np.nan: np.nan})
+    return X_train, X_val
+
+def type_coversion_categorical(X_train, X_val, coulmns):
+    X_train[coulmns] = X_train[coulmns].astype(str)
+    X_val[coulmns] = X_val[coulmns].astype(str)
+    return X_train, X_val
+
+def drop_description_columns(X_train, X_val):
+    """
+    Drop all columns in X_train and X_val that contain the word 'description' in their names (case-insensitive).
+    """
+    description_columns = X_train.columns[X_train.columns.str.contains('description', case=False, na=False)]
+    
+
+    X_train = X_train.drop(description_columns, axis=1)
+    X_val = X_val.drop(description_columns, axis=1)
+    
+    return X_train, X_val
+
+def drop_unwanted_columns(X_train, X_val, columns):
+    X_train = X_train.drop(columns, axis=1)
+    X_val = X_val.drop(columns, axis=1)
     return X_train, X_val
 
 # Create new features based on the binned groups of the original features
@@ -167,6 +190,32 @@ def outliers_specific(X_train, X_val, columns, lower_bound=None, upper_bound=Non
         X_val[col] = np.where(X_val[col] > upper_bound, upper_bound, X_val[col])
     return X_train, X_val
 
+def winsorize_outliers(X_train, X_val, columns):
+    """
+    Winsorizes outliers in the specified columns for X_train and X_val.
+    The bounds are calculated based on the X_train data.
+    """
+    for column in columns:
+        # Calculate bounds based on X_train
+        q1 = X_train[column].quantile(0.25)
+        q3 = X_train[column].quantile(0.75)
+        iqr = q3 - q1
+
+        lower_bound = q1 - 1.5 * iqr
+        upper_bound = q3 + 1.5 * iqr
+
+        # Winsorize the column in X_train
+        X_train[column] = X_train[column].apply(
+            lambda x: lower_bound if x < lower_bound else (upper_bound if x > upper_bound else x)
+        )
+
+        # Winsorize the column in X_val using the same bounds
+        X_val[column] = X_val[column].apply(
+            lambda x: lower_bound if x < lower_bound else (upper_bound if x > upper_bound else x)
+        )
+
+    return X_train, X_val
+
 
 # MinMax Scaler
 def scaling_minmax(X_train, X_val, columns):
@@ -181,6 +230,15 @@ def scaling_minmax(X_train, X_val, columns):
 def scaling_standard(X_train, X_val, columns):
 
     scaler = StandardScaler()
+
+    X_train[columns] = scaler.fit_transform(X_train[columns])
+    X_val[columns] = scaler.transform(X_val[columns])
+    
+    return X_train, X_val
+
+def scaling_robust(X_train, X_val, columns):
+
+    scaler = RobustScaler()
 
     X_train[columns] = scaler.fit_transform(X_train[columns])
     X_val[columns] = scaler.transform(X_val[columns])
