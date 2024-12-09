@@ -24,18 +24,6 @@ DESCRIPTION_COLUMNS = ['WCIO Cause of Injury Description',
 
 BOOLEAN_COLUMNS = ['Alternative Dispute Resolution', 'Attorney/Representative','COVID-19 Indicator']
 
-
-
-# Drop empty rows
-def drop_empty_rows(X_train, X_val):
-    '''
-    Drop empty rows in the dataset where only Assembly Date is filled
-    '''
-    X_train = X_train[~(X_train.drop(columns=['Assembly Date']).isna().all(axis=1) & X_train['Assembly Date'].notna())]
-    X_val = X_val[~(X_val.drop(columns=['Assembly Date']).isna().all(axis=1) & X_val['Assembly Date'].notna())]
-
-    return X_train, X_val
-
 # convert all date columns to datetime format
 def convert_to_datetime(X_train, X_val, columns):
     '''
@@ -49,14 +37,15 @@ def convert_to_datetime(X_train, X_val, columns):
 # Convert all columns to timestemp format
 def convert_to_timestamp(X_train, X_val, columns):
     '''
-    Convert all columns to timestamp format
+    Convert all specified columns in X_train and X_val to timestamp format.
     '''
     for col in columns:
         X_train[col] = pd.to_datetime(X_train[col], errors='coerce')
-        X_val[col] = pd.to_datetime(X_val[col], errors='coerce')    
-
-        X_train[col].apply(lambda x: x.timestamp() if pd.notnull(x) else np.nan)
-        X_val[col].apply(lambda x: x.timestamp() if pd.notnull(x) else np.nan)
+        X_val[col] = pd.to_datetime(X_val[col], errors='coerce')
+        
+        X_train[col] = X_train[col].apply(lambda x: x.timestamp() if pd.notnull(x) else np.nan)
+        X_val[col] = X_val[col].apply(lambda x: x.timestamp() if pd.notnull(x) else np.nan)
+    
     return X_train, X_val
 
 #function to transform Y and N into boolean while preserving the NaNs
@@ -75,7 +64,7 @@ def convert_to_bool(X_train, X_val, col_names=BOOLEAN_COLUMNS):
     return X_train, X_val
 
 # Create new features based on the binned groups of the original features
-def newFeature_binnedGroups(X_train, X_val, X_test, columns, bins=4):
+def newFeature_binnedGroups(X_train, X_val, columns, bins=4):
     '''
     Create new features based on the binned groups of the original features
 
@@ -89,21 +78,20 @@ def newFeature_binnedGroups(X_train, X_val, X_test, columns, bins=4):
 
     for col in columns:
         # Define bins based on training data
-        train_bins = pd.qcut(X_train[col], q=bins, retbins=True)[1]  # Get bin edges
+        train_bins = pd.qcut(X_train[col], q=bins, retbins=True, duplicates='drop')[1]  # Get bin edges
 
         # Apply the bins to all datasets
-        X_train[f'{col} Group'] = pd.cut(X_train[col], bins=train_bins, labels=False, include_lowest=True)
-        X_val[f'{col} Group'] = pd.cut(X_val[col], bins=train_bins, labels=False, include_lowest=True)
-        X_test[f'{col} Group'] = pd.cut(X_test[col], bins=train_bins, labels=False, include_lowest=True)
+        X_train[f'{col} Group'] = pd.cut(X_train[col], bins=train_bins, labels=False, include_lowest=True, duplicates='drop')
+        X_val[f'{col} Group'] = pd.cut(X_val[col], bins=train_bins, labels=False, include_lowest=True, duplicates='drop')
 
         X_train[f'{col} Group'] = X_train[f'{col} Group'].astype(str)
         X_val[f'{col} Group'] = X_val[f'{col} Group'].astype(str)
-        X_test[f'{col} Group'] = X_test[f'{col} Group'].astype(str)
 
-    return X_train, X_val, X_test
+
+    return X_train, X_val
 
 # Create new feature month based on the date feature
-def newFeature_month(X_train, X_val, X_test, columns):
+def newFeature_month(X_train, X_val, columns):
     '''
     Create new feature month based on the date feature. 
     Need to be applied to columns with datetime format.
@@ -118,12 +106,11 @@ def newFeature_month(X_train, X_val, X_test, columns):
     for col in columns:
         X_train[f'{col} Month'] = X_train[col].dt.month
         X_val[f'{col} Month'] = X_val[col].dt.month
-        X_test[f'{col} Month'] = X_test[col].dt.month
 
     return X_train, X_val
 
 # Create new feature days since the last event
-def newFeature_daysBetween(X_train, X_val, X_test, firstDate, secondDate):
+def newFeature_daysBetween(X_train, X_val, firstDate, secondDate):
     '''
     Create new feature days since the last event. 
     Need to be applied to columns with datetime format.
@@ -137,9 +124,8 @@ def newFeature_daysBetween(X_train, X_val, X_test, firstDate, secondDate):
 
     X_train[f'Days Between {firstDate} and {secondDate}'] = (X_train[secondDate].max() - X_train[firstDate]).dt.days
     X_val[f'Days Between {firstDate} and {secondDate}'] = (X_val[secondDate].max() - X_val[firstDate]).dt.days
-    X_test[f'Days Between {firstDate} and {secondDate}'] = (X_test[secondDate].max() - X_test[firstDate]).dt.days
 
-    return X_train, X_val, X_test
+    return X_train, X_val
 
 
 # Push outliers to upper and lower bounds
@@ -181,22 +167,22 @@ def outliers_specific(X_train, X_val, columns, lower_bound=None, upper_bound=Non
 
 # MinMax Scaler
 def scaling_minmax(X_train, X_val, columns):
-    scaler = MinMaxScaler()
-    
-    # Scale only specified columns
-    X_train_scaled = X_train.copy()
-    X_val_scaled = X_val.copy()
-    
-    X_train_scaled[columns] = scaler.fit_transform(X_train[columns])
-    X_val_scaled[columns] = scaler.transform(X_val[columns])
-    return X_train_scaled, X_val_scaled
 
-# Standard Scaler
+    scaler = MinMaxScaler()
+
+    X_train[columns] = scaler.fit_transform(X_train[columns])
+    X_val[columns] = scaler.transform(X_val[columns])
+    
+    return X_train, X_val
+
 def scaling_standard(X_train, X_val, columns):
+
     scaler = StandardScaler()
-    X_train_scaled = pd.DataFrame(scaler.fit_transform(X_train), columns=columns)
-    X_val_scaled = pd.DataFrame(scaler.transform(X_val), columns=columns)
-    return X_train_scaled, X_val_scaled
+
+    X_train[columns] = scaler.fit_transform(X_train[columns])
+    X_val[columns] = scaler.transform(X_val[columns])
+    
+    return X_train, X_val
 
 # Label Encoder for target variable
 def encoding_label(y_train, y_val):
@@ -213,31 +199,60 @@ def encoding_onehot(X_train, X_val, columns):
     '''
     OneHot Encoder for categorical variables with low cardinality
     '''
-    # Changing datatype to string for encoding
+    X_train = X_train.copy()
+    X_val = X_val.copy()
+    
     X_train[columns] = X_train[columns].astype(str)
     X_val[columns] = X_val[columns].astype(str)
-
+    
     ohe = OneHotEncoder(sparse_output=False, handle_unknown='ignore')
     X_train_encoded = pd.DataFrame(ohe.fit_transform(X_train[columns]))
     X_val_encoded = pd.DataFrame(ohe.transform(X_val[columns]))
-    return X_train_encoded, X_val_encoded
+    
+    columns_encoded = ohe.get_feature_names_out(columns)
+    X_train_encoded.columns = columns_encoded
+    X_val_encoded.columns = columns_encoded
+    X_train_encoded.index = X_train.index
+    X_val_encoded.index = X_val.index
+    
+    X_train_rest = X_train.drop(columns, axis=1)
+    X_val_rest = X_val.drop(columns, axis=1)
+    X_train_final = pd.concat([X_train_rest, X_train_encoded], axis=1)
+    X_val_final = pd.concat([X_val_rest, X_val_encoded], axis=1)
+    
+    return X_train_final, X_val_final
 
 # Frequency Encoding for categorical variables with high cardinality -> not filling unseen values
 def encoding_frequency1(X_train, X_val, columns):
     '''
     Frequency Encoding for categorical variables with high cardinality -> not filling unseen values
     '''
+    X_train = X_train.copy()
+    X_val = X_val.copy()
+    
     for col in columns:
-        # Changing datatype to string for encoding
         X_train[col] = X_train[col].astype(str)
         X_val[col] = X_val[col].astype(str)
+    
+    fe_dict = {}
+    for col in columns:
+        fe_dict[col] = X_train.groupby(col).size() / len(X_train)
+        
+        X_train[col] = X_train[col].apply(lambda x: fe_dict[col].get(x, 0))  
+        X_val[col] = X_val[col].apply(lambda x: fe_dict[col].get(x, 0))  
+    
 
-        fe = X_train.groupby(col).size() / len(X_train)
-        X_train[col] = X_train[col].apply(lambda x : fe[x])
-        X_val[col] = X_val[col].apply(lambda x : fe[x])
-    return X_train, X_val
+    X_train_rest = X_train.drop(columns, axis=1)
+    X_val_rest = X_val.drop(columns, axis=1)
+    
+    X_train_final = pd.concat([X_train_rest, X_train[columns]], axis=1)
+    X_val_final = pd.concat([X_val_rest, X_val[columns]], axis=1)
+    
+    X_train_final.index = X_train.index
+    X_val_final.index = X_val.index
+    
+    return X_train_final, X_val_final
 
-# Frequency Encoding for categorical variables with high cardinality -> filling unseen values
 def encoding_frequency2(X_train, X_val, columns):
     '''
     Frequency Encoding for categorical variables with high cardinality -> filling unseen values
@@ -563,6 +578,8 @@ def feature_creation_has_Cdate (X_train, X_val):
     X_val['Has C-3 Date'] = X_val['C-3 Date'].apply(lambda x: 0 if pd.isna(x) else 1)
     X_train['Has C-2 Date'] = X_train['C-2 Date'].apply(lambda x: 0 if pd.isna(x) else 1)
     X_val['Has C-2 Date'] = X_val['C-2 Date'].apply(lambda x: 0 if pd.isna(x) else 1)
+    X_train['Has First Hearing Date'] = X_train['C-2 Date'].apply(lambda x: 0 if pd.isna(x) else 1)
+    X_val['Has First Hearing Date'] = X_val['C-2 Date'].apply(lambda x: 0 if pd.isna(x) else 1)
     return X_train, X_val
 
 def feature_selection_rfe(X_train, y_train, n_features, model):
@@ -613,7 +630,7 @@ def feature_selection_rfecv(X_train, y_train, model, cv_folds=5, scoring='accura
     - optimal_num_features: Optimal number of features determined by RFECV.
     """
     # Initialize RFECV
-    rfecv = RFECV(estimator=model, step=1, cv=cv_folds, scoring=scoring)
+    rfecv = RFECV(estimator=model, step=1, cv=cv_folds, scoring=scoring, n_jobs=-1)
     rfecv.fit(X_train, y_train)
 
     # Extract feature rankings
@@ -696,5 +713,3 @@ def impute_missing_with_knn(X_train, X_val, X_test, n_neighbors=5):
     X_train_imputed, X_val_imputed, X_test_imputed = impute_missing_with_knn(X_train, X_val, X_test, n_neighbors=5)
     return X_train_imputed, X_val_imputed, X_test_imputed
 # use the code above to impute missing values in the dataset with using Knn imputer. 
-
-

@@ -1,0 +1,2 @@
+params,avg_macro_f1,std_macro_f1,avg_iter,std_iter
+"{'activation': 'relu', 'alpha': 0.0001, 'batch_size': 'auto', 'hidden_layer_sizes': (7, 5), 'learning_rate_init': 0.001}",0.258659724140526,0.019429567354372963,122.6,18.06211504780102
