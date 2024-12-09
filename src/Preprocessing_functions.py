@@ -8,11 +8,12 @@ import scipy.stats as stats
 from scipy.stats import chi2_contingency
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import RobustScaler
 from sklearn.impute import KNNImputer
 from sklearn.calibration import LabelEncoder
 from sklearn.preprocessing import OrdinalEncoder
 from sklearn.preprocessing import OneHotEncoder
-from sklearn.preprocessing import StandardScaler, RobustScaler
+from sklearn.preprocessing import StandardScaler
 from sklearn.feature_selection import RFE, RFECV
 
 CODE_COLUMNS = ['Industry Code', 'WCIO Cause of Injury Code',
@@ -48,17 +49,6 @@ def convert_to_timestamp(X_train, X_val, columns):
     
     return X_train, X_val
 
-def convert_to_timestamp_test(X_test, columns):
-    '''
-    Convert all specified columns in X_train and X_val to timestamp format.
-    '''
-    for col in columns:
-        X_test[col] = pd.to_datetime(X_test[col], errors='coerce')
-        
-        X_test[col] = X_test[col].apply(lambda x: x.timestamp() if pd.notnull(x) else np.nan)
-    
-    return X_test
-
 #function to transform Y and N into boolean while preserving the NaNs
 def convert_to_bool(X_train, X_val, col_names=BOOLEAN_COLUMNS):
     '''
@@ -74,18 +64,27 @@ def convert_to_bool(X_train, X_val, col_names=BOOLEAN_COLUMNS):
         X_val[col_name] = X_val[col_name].map({'Y': True, 'N': False, np.nan: np.nan})
     return X_train, X_val
 
-def convert_to_bool_test(X_test, col_names=BOOLEAN_COLUMNS):
-    '''
-    Convert 'Y' and 'N' to True and False respectively while preserving NaNs
+def type_coversion_categorical(X_train, X_val, coulmns):
+    X_train[coulmns] = X_train[coulmns].astype(str)
+    X_val[coulmns] = X_val[coulmns].astype(str)
+    return X_train, X_val
 
-    Parameters:
-    X_train: DataFrame
-    X_val: DataFrame
-    col_names: list default: BOOLEAN_COLUMNS
-    '''
-    for col_name in col_names:
-        X_test[col_name] = X_test[col_name].map({'Y': True, 'N': False, np.nan: np.nan})
-    return X_test
+def drop_description_columns(X_train, X_val):
+    """
+    Drop all columns in X_train and X_val that contain the word 'description' in their names (case-insensitive).
+    """
+    description_columns = X_train.columns[X_train.columns.str.contains('description', case=False, na=False)]
+    
+
+    X_train = X_train.drop(description_columns, axis=1)
+    X_val = X_val.drop(description_columns, axis=1)
+    
+    return X_train, X_val
+
+def drop_unwanted_columns(X_train, X_val, columns):
+    X_train = X_train.drop(columns, axis=1)
+    X_val = X_val.drop(columns, axis=1)
+    return X_train, X_val
 
 # Create new features based on the binned groups of the original features
 def newFeature_binnedGroups(X_train, X_val, X_test, columns, bins=4):
@@ -191,6 +190,32 @@ def outliers_specific(X_train, X_val, columns, lower_bound=None, upper_bound=Non
         X_val[col] = np.where(X_val[col] > upper_bound, upper_bound, X_val[col])
     return X_train, X_val
 
+def winsorize_outliers(X_train, X_val, columns):
+    """
+    Winsorizes outliers in the specified columns for X_train and X_val.
+    The bounds are calculated based on the X_train data.
+    """
+    for column in columns:
+        # Calculate bounds based on X_train
+        q1 = X_train[column].quantile(0.25)
+        q3 = X_train[column].quantile(0.75)
+        iqr = q3 - q1
+
+        lower_bound = q1 - 1.5 * iqr
+        upper_bound = q3 + 1.5 * iqr
+
+        # Winsorize the column in X_train
+        X_train[column] = X_train[column].apply(
+            lambda x: lower_bound if x < lower_bound else (upper_bound if x > upper_bound else x)
+        )
+
+        # Winsorize the column in X_val using the same bounds
+        X_val[column] = X_val[column].apply(
+            lambda x: lower_bound if x < lower_bound else (upper_bound if x > upper_bound else x)
+        )
+
+    return X_train, X_val
+
 
 # MinMax Scaler
 def scaling_minmax(X_train, X_val, columns):
@@ -202,14 +227,6 @@ def scaling_minmax(X_train, X_val, columns):
     
     return X_train, X_val
 
-def scaling_minmax_test(X_test, columns):
-
-    scaler = MinMaxScaler()
-
-    X_test[columns] = scaler.fit_transform(X_test[columns])
-    
-    return X_test
-
 def scaling_standard(X_train, X_val, columns):
 
     scaler = StandardScaler()
@@ -218,34 +235,25 @@ def scaling_standard(X_train, X_val, columns):
     X_val[columns] = scaler.transform(X_val[columns])
     
     return X_train, X_val
-def robust_scaling(X_train, X_val, columns):
-    scaler= RobustScaler()
+
+def scaling_robust(X_train, X_val, columns):
+
+    scaler = RobustScaler()
+
     X_train[columns] = scaler.fit_transform(X_train[columns])
     X_val[columns] = scaler.transform(X_val[columns])
-    return X_train, X_val
-
-def robust_scaling_test(X_test, columns):
-    scaler= RobustScaler()
-    X_test[columns] = scaler.fit_transform(X_test[columns])
-    return X_test
-
-def scaling_standard_test(X_test, columns):
-
-    scaler = StandardScaler()
-
-    X_test[columns] = scaler.fit_transform(X_test[columns])
     
-    return X_test
+    return X_train, X_val
 
 # Label Encoder for target variable
 def encoding_label(y_train, y_val):
     '''
     Label Encoder for target variable
     '''
-    le = LabelEncoder()
-    y_train_encoded = le.fit_transform(y_train)
-    y_val_encoded = le.fit_transform(y_val)
-    return y_train_encoded, y_val_encoded
+    label_encoder = LabelEncoder()
+    y_train_encoded = label_encoder.fit_transform(y_train)
+    y_val_encoded = label_encoder.transform(y_val)
+    return y_train_encoded, y_val_encoded, label_encoder
 
 # OneHot Encoder for categorical variables with low cardinality
 def encoding_onehot(X_train, X_val, columns):
@@ -274,27 +282,6 @@ def encoding_onehot(X_train, X_val, columns):
     X_val_final = pd.concat([X_val_rest, X_val_encoded], axis=1)
     
     return X_train_final, X_val_final
-
-def encoding_onehot_test(X_test, columns):
-    '''
-    OneHot Encoder for categorical variables with low cardinality
-    '''
-    X_test = X_test.copy()
-    
-    
-    X_test[columns] = X_test[columns].astype(str)
-    
-    ohe = OneHotEncoder(sparse_output=False, handle_unknown='ignore')
-    X_test_encoded = pd.DataFrame(ohe.fit_transform(X_test[columns]))
-    
-    columns_encoded = ohe.get_feature_names_out(columns)
-    X_test_encoded.columns = columns_encoded
-    X_test_encoded.index = X_test.index
-    
-    X_test_rest = X_test.drop(columns, axis=1)
-    X_test_final = pd.concat([X_test_rest, X_test_encoded], axis=1)
-    
-    return X_test_final
 
 # Frequency Encoding for categorical variables with high cardinality -> not filling unseen values
 def encoding_frequency1(X_train, X_val, columns):
@@ -326,30 +313,6 @@ def encoding_frequency1(X_train, X_val, columns):
     X_val_final.index = X_val.index
     
     return X_train_final, X_val_final
-
-def encoding_frequency1_test(X_test, columns):
-    '''
-    Frequency Encoding for categorical variables with high cardinality -> not filling unseen values
-    '''
-    X_test = X_test.copy()
-    
-    for col in columns:
-        X_test[col] = X_test[col].astype(str)
-    
-    fe_dict = {}
-    for col in columns:
-        fe_dict[col] = X_test.groupby(col).size() / len(X_test)
-        
-        X_test[col] = X_test[col].apply(lambda x: fe_dict[col].get(x, 0))  
-    
-
-    X_test_rest = X_test.drop(columns, axis=1)
-    
-    X_test_final = pd.concat([X_test_rest, X_test[columns]], axis=1)
-    
-    X_test_final.index = X_test.index
-    
-    return X_test_final
 
 def encoding_frequency2(X_train, X_val, columns):
     '''
@@ -426,20 +389,6 @@ def impute_mean_numerical(X_train, X_val, columns):
         X_val[col].fillna(mean_value, inplace=True)
 
     return X_train, X_val
-def impute_mean_numerical_test(X_test, columns):
-    """
-    Impute missing values for continuous (numerical) variables with the mean of the training data.
-    
-    """
-
-    for col in columns:
-        # Calculate the mean of the column in the training data
-        mean_value = X_test[col].mean()
-        
-        # Impute missing values in both datasets
-        X_test[col].fillna(mean_value, inplace=True)
-
-    return X_test
 
 def impute_mode_categorical(X_train, X_val, columns):
     """
@@ -674,21 +623,6 @@ def fill_missing_with_mode(X_train, X_val):
     X_val = X_val.infer_objects(copy=False)
 
     return X_train, X_val
-    
-def fill_missing_with_mode_test(X_test):
-    '''
-    Fill missing values with the mode of the column
-    '''
-    for col in CODE_COLUMNS:
-        # Get the mode (most frequent value)
-        mode = X_test[col].mode().iloc[0]
-
-        X_test.loc[:, col] = X_test[col].fillna(mode)
-    
-    X_test = X_test.infer_objects(copy=False)
-
-    return X_test
-
 
 def drop_description_columns(X_train, X_val):
     '''
@@ -700,7 +634,6 @@ def drop_description_columns(X_train, X_val):
 
     return X_train, X_val
 
-
 def feature_creation_has_Cdate (X_train, X_val):
     X_train['Has C-3 Date'] = X_train['C-3 Date'].apply(lambda x: 0 if pd.isna(x) else 1)
     X_val['Has C-3 Date'] = X_val['C-3 Date'].apply(lambda x: 0 if pd.isna(x) else 1)
@@ -709,12 +642,6 @@ def feature_creation_has_Cdate (X_train, X_val):
     X_train['Has First Hearing Date'] = X_train['C-2 Date'].apply(lambda x: 0 if pd.isna(x) else 1)
     X_val['Has First Hearing Date'] = X_val['C-2 Date'].apply(lambda x: 0 if pd.isna(x) else 1)
     return X_train, X_val
-
-def feature_creation_has_Cdate_test (X_test):
-    X_test['Has C-3 Date'] = X_test['C-3 Date'].apply(lambda x: 0 if pd.isna(x) else 1)
-    X_test['Has C-2 Date'] = X_test['C-2 Date'].apply(lambda x: 0 if pd.isna(x) else 1)
-    X_test['Has First Hearing Date'] = X_test['C-2 Date'].apply(lambda x: 0 if pd.isna(x) else 1)
-    return X_test
 
 def feature_selection_rfe(X_train, y_train, n_features, model):
     """
