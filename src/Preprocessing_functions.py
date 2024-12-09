@@ -250,10 +250,10 @@ def encoding_label(y_train, y_val):
     '''
     Label Encoder for target variable
     '''
-    le = LabelEncoder()
-    y_train_encoded = le.fit_transform(y_train)
-    y_val_encoded = le.transform(y_val)
-    return y_train_encoded, y_val_encoded
+    label_encoder = LabelEncoder()
+    y_train_encoded = label_encoder.fit_transform(y_train)
+    y_val_encoded = label_encoder.transform(y_val)
+    return y_train_encoded, y_val_encoded, label_encoder
 
 # OneHot Encoder for categorical variables with low cardinality
 def encoding_onehot(X_train, X_val, columns):
