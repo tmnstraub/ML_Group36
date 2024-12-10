@@ -64,7 +64,7 @@ def convert_to_bool(X_train, X_val, col_names=BOOLEAN_COLUMNS):
         X_val[col_name] = X_val[col_name].map({'Y': True, 'N': False, np.nan: np.nan})
     return X_train, X_val
 
-def type_coversion_categorical(X_train, X_val, coulmns):
+def type_conversion_categorical(X_train, X_val, coulmns):
     X_train[coulmns] = X_train[coulmns].astype(str)
     X_val[coulmns] = X_val[coulmns].astype(str)
     return X_train, X_val
@@ -87,7 +87,7 @@ def drop_unwanted_columns(X_train, X_val, columns):
     return X_train, X_val
 
 # Create new features based on the binned groups of the original features
-def newFeature_binnedGroups(X_train, X_val, X_test, columns, bins=4):
+def newFeature_binnedGroups(X_train, X_val, X_test, columns, bins=6):
     '''
     Create new features based on the binned groups of the original features
 
@@ -98,6 +98,8 @@ def newFeature_binnedGroups(X_train, X_val, X_test, columns, bins=4):
     columns: list
     bins: int default: 4
     '''
+
+    
 
     for col in columns:
         # Define bins based on training data
@@ -115,7 +117,7 @@ def newFeature_binnedGroups(X_train, X_val, X_test, columns, bins=4):
     return X_train, X_val, X_test
 
 # Create new feature month based on the date feature
-def newFeature_month(X_train, X_val, X_test, columns):
+def newFeature_month(X_train, X_val, columns):
     '''
     Create new feature month based on the date feature. 
     Need to be applied to columns with datetime format.
@@ -130,7 +132,6 @@ def newFeature_month(X_train, X_val, X_test, columns):
     for col in columns:
         X_train[f'{col} Month'] = X_train[col].dt.month
         X_val[f'{col} Month'] = X_val[col].dt.month
-        X_test[f'{col} Month'] = X_test[col].dt.month
 
     return X_train, X_val
 
@@ -149,9 +150,23 @@ def newFeature_daysBetween(X_train, X_val, X_test, firstDate, secondDate):
 
     X_train[f'Days Between {firstDate} and {secondDate}'] = (X_train[secondDate].max() - X_train[firstDate]).dt.days
     X_val[f'Days Between {firstDate} and {secondDate}'] = (X_val[secondDate].max() - X_val[firstDate]).dt.days
-    X_test[f'Days Between {firstDate} and {secondDate}'] = (X_test[secondDate].max() - X_test[firstDate]).dt.days
 
-    return X_train, X_val, X_test
+    return X_train, X_val
+
+
+
+def newFeature_hasIME4(X_train, X_val):
+    '''
+    Create new feature 'Has IME-4' based on the 'IME-4 Count' feature. 
+
+    Parameters:
+    X_train: DataFrame
+    X_val: DataFrame
+    '''
+    X_train['Has IME-4'] = X_train['IME-4 Count'].apply(lambda x: 0 if pd.isna(x) else 1)
+    X_val['Has IME-4'] = X_val['IME-4 Count'].apply(lambda x: 0 if pd.isna(x) else 1)
+
+    return X_train, X_val
 
 
 # Push outliers to upper and lower bounds
@@ -390,6 +405,7 @@ def impute_mean_numerical(X_train, X_val, columns):
 
     return X_train, X_val
 
+
 def impute_mode_categorical(X_train, X_val, columns):
     """
     Impute missing values for categorical variables with the mode of the training data.
@@ -405,6 +421,37 @@ def impute_mode_categorical(X_train, X_val, columns):
         X_val[col].fillna(mode_value, inplace=True)
 
     return X_train, X_val
+
+def impute_weekly_wage_with_zipIndustryCode(X_train, X_val):
+    """
+    Impute missing 'Average Weekly Wage' values for X_train and X_val
+    based on the mean of 'Zip Code' and 'Industry Code'.
+
+    Parameters:
+    - X_train: Training DataFrame with 'Average Weekly Wage', 'Zip Code', and 'Industry Code'.
+    - X_val: Validation DataFrame with the same columns.
+
+    Returns:
+    - X_train: Updated training DataFrame with imputed 'Average Weekly Wage'.
+    - X_val: Updated validation DataFrame with imputed 'Average Weekly Wage'.
+    """
+    # Step 1: Compute the mean weekly wage by 'Zip Code' and 'Industry Code' in X_train
+    mean_wage_by_zip_industry = X_train.groupby(['Zip Code', 'Industry Code'])['Average Weekly Wage'].mean()
+
+    # Step 2: Define the imputation function
+    def impute_weekly_wage(row):
+        if pd.isnull(row['Average Weekly Wage']):
+            # Get the mean wage for the specific combination of 'Zip Code' and 'Industry Code'
+            return mean_wage_by_zip_industry.get((row['Zip Code'], row['Industry Code']), np.nan)
+        else:
+            return row['Average Weekly Wage']
+
+    # Step 3: Apply the imputation function to both datasets
+    X_train['Average Weekly Wage'] = X_train.apply(impute_weekly_wage, axis=1)
+    X_val['Average Weekly Wage'] = X_val.apply(impute_weekly_wage, axis=1)
+
+    return X_train, X_val
+
 
 def compute_most_frequent_code_per_description(df, code_columns):
     '''
@@ -501,12 +548,14 @@ def fill_missing_codes_description_based(X_train, X_val):
 def fillna_zip_code(X_train, X_val):
     """
     Fills missing 'Zip Code' values in train and validation datasets based on modes.
-    first if their is a conty of injury and district name match then fill with mode zip code
-    if not fill with mode zip code of district name
+    First, if there is a County of Injury and District Name match, fill with mode Zip Code.
+    If not, fill with mode Zip Code of District Name.
     """
-    # Save original indices
+    # Save original indices and ensure boolean columns remain intact
     original_index_train = X_train.index
     original_index_val = X_val.index
+    boolean_columns_train = X_train[BOOLEAN_COLUMNS].copy()
+    boolean_columns_val = X_val[BOOLEAN_COLUMNS].copy()
 
     # Calculate mode Zip Codes for each group in X_train
     mode_zip_codes_train = (
@@ -553,19 +602,24 @@ def fillna_zip_code(X_train, X_val):
     X_val = fill_zip_codes(X_val)
     X_train = fill_zip_codes(X_train)
 
-    # Restore original indices
+    # Restore original indices and boolean column values
     X_train.index = original_index_train
     X_val.index = original_index_val
+    X_train[BOOLEAN_COLUMNS] = boolean_columns_train
+    X_val[BOOLEAN_COLUMNS] = boolean_columns_val
 
     return X_train, X_val
+
 
 def fillnan_accident_date(X_train,X_val):
     """
     this function fills the missing values in the 'Accident Date' column with the mean difference between 'C-2 Date' and 'Accident Date'
     """
-    X_train['time_diff C2 accident'] = X_train['Accident Date']-X_train['C-2 Date']
+    X_temp = X_train.copy()
 
-    mean_difference_c2_accident = X_train['time_diff C2 accident'].mean()
+    X_temp['time_diff C2 accident'] = X_temp['Accident Date']-X_temp['C-2 Date']
+
+    mean_difference_c2_accident = X_temp['time_diff C2 accident'].mean()
     
     X_train['Accident Date'].fillna(X_train['C-2 Date'] - mean_difference_c2_accident, inplace=True)
     X_val['Accident Date'].fillna(X_val['C-2 Date'] - mean_difference_c2_accident, inplace=True)
@@ -606,6 +660,14 @@ def fillnan_birth_year(X_train, X_val):
     """
     X_train = process_birth_year_columns(X_train)
     X_val = process_birth_year_columns(X_val)
+    return X_train, X_val
+
+def fillnan_IME4_count(X_train, X_val):
+    """
+    this function fills the missing values in the 'IME-4 Count' column with 0 as is just means that there is no IME-4 count
+    """
+    X_train["IME-4 Count"].fillna(0, inplace=True)
+    X_val["IME-4 Count"].fillna(0, inplace=True)
     return X_train, X_val
     
 def fill_missing_with_mode(X_train, X_val):
