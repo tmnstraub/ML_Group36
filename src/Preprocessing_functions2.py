@@ -163,6 +163,15 @@ def newFeature_hasIME4(X_train, X_val):
 
     return X_train, X_val
 
+def log_transform(X_train, X_val):
+    '''
+    Apply log transformation to the specified columns in X_train and X_val
+    '''
+
+    X_train['Average Weekly Wage'] = X_train['Average Weekly Wage'].apply(lambda x: np.log1p(x) if x > 0 else 0)
+    X_val['Average Weekly Wage'] = X_val['Average Weekly Wage'].apply(lambda x: np.log1p(x) if x > 0 else 0)
+    return X_train, X_val
+
 
 # Push outliers to upper and lower bounds
 def outliers_iqr(X_train, X_val, columns):
@@ -182,18 +191,21 @@ def outliers_iqr(X_train, X_val, columns):
     return X_train, X_val
 
 # Push outliers to upper bound and lower bound but give the possibilty to choos a specific value for both bounds. If the value is None, the bound will be calculated using the IQR method lower and upper bound is not filled use the IQR method
-def outliers_specific(X_train, X_val, columns, lower_bound=None, upper_bound=None):
+def outliers_specific(X_train, X_val, columns, lower_bound=None):
     '''
     Push outliers to upper bound and lower bound but give the possibilty to choose a specific value for both bounds. 
     If the any boundary value is None, the bound will be calculated using the IQR method
     '''
     for col in columns:
-        if lower_bound is None or upper_bound is None:
-            Q1 = X_train[col].quantile(0.25)
-            Q3 = X_train[col].quantile(0.75)
-            IQR = Q3 - Q1
-            lower_bound = Q1 - 1.5 * IQR
-            upper_bound = Q3 + 1.5 * IQR
+        Q1 = X_train[col].quantile(0.25)
+        Q3 = X_train[col].quantile(0.75)
+        IQR = Q3 - Q1
+        upper_bound = int(Q3 + 1.5 * IQR)
+        
+
+        if lower_bound is None:
+            lower_bound = int(Q1 - 1.5 * IQR)
+            
         X_train[col] = np.where(X_train[col] < lower_bound, lower_bound, X_train[col])
         X_train[col] = np.where(X_train[col] > upper_bound, upper_bound, X_train[col])
         X_val[col] = np.where(X_val[col] < lower_bound, lower_bound, X_val[col])
