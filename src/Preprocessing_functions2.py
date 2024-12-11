@@ -212,6 +212,28 @@ def outliers_specific(X_train, X_val, columns, lower_bound=None):
         X_val[col] = np.where(X_val[col] > upper_bound, upper_bound, X_val[col])
     return X_train, X_val
 
+# Push outliers to upper bound and lower bound but give the possibilty to choos a specific value for both bounds. If the value is None, the bound will be calculated using the IQR method lower and upper bound is not filled use the IQR method
+def outliers_specific2(X_train, X_val, str, lower_bound=None):
+    '''
+    Push outliers to upper bound and lower bound but give the possibilty to choose a specific value for both bounds. 
+    If the any boundary value is None, the bound will be calculated using the IQR method
+    '''
+
+    Q1 = X_train[str].quantile(0.25)
+    Q3 = X_train[str].quantile(0.75)
+    IQR = Q3 - Q1
+    upper_bound = int(Q3 + 1.5 * IQR)
+        
+
+    if lower_bound is None:
+        lower_bound = int(Q1 - 1.5 * IQR)
+            
+    X_train[str] = np.where(X_train[str] < lower_bound, lower_bound, X_train[str])
+    X_train[str] = np.where(X_train[str] > upper_bound, upper_bound, X_train[str])
+    X_val[str] = np.where(X_val[str] < lower_bound, lower_bound, X_val[str])
+    X_val[str] = np.where(X_val[str] > upper_bound, upper_bound, X_val[str])
+    return X_train, X_val
+
 def winsorize_outliers(X_train, X_val, columns):
     """
     Winsorizes outliers in the specified columns for X_train and X_val.
