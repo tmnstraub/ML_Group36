@@ -87,16 +87,15 @@ def drop_unwanted_columns(X_train, X_val, columns):
     return X_train, X_val
 
 # Create new features based on the binned groups of the original features
-def newFeature_binnedGroups(X_train, X_val, X_test, columns, bins=6):
+def newFeature_binnedGroups(X_train, X_val, columns, bins=6):
     '''
     Create new features based on the binned groups of the original features
 
     Parameters:
     X_train: DataFrame
     X_val: DataFrame
-    X_test: DataFrame
     columns: list
-    bins: int default: 4
+    bins: int default: 6
     '''
 
     
@@ -108,13 +107,11 @@ def newFeature_binnedGroups(X_train, X_val, X_test, columns, bins=6):
         # Apply the bins to all datasets
         X_train[f'{col} Group'] = pd.cut(X_train[col], bins=train_bins, labels=False, include_lowest=True)
         X_val[f'{col} Group'] = pd.cut(X_val[col], bins=train_bins, labels=False, include_lowest=True)
-        X_test[f'{col} Group'] = pd.cut(X_test[col], bins=train_bins, labels=False, include_lowest=True)
 
         X_train[f'{col} Group'] = X_train[f'{col} Group'].astype(str)
         X_val[f'{col} Group'] = X_val[f'{col} Group'].astype(str)
-        X_test[f'{col} Group'] = X_test[f'{col} Group'].astype(str)
 
-    return X_train, X_val, X_test
+    return X_train, X_val
 
 # Create new feature month based on the date feature
 def newFeature_month(X_train, X_val, columns):
@@ -136,7 +133,7 @@ def newFeature_month(X_train, X_val, columns):
     return X_train, X_val
 
 # Create new feature days since the last event
-def newFeature_daysBetween(X_train, X_val, X_test, firstDate, secondDate):
+def newFeature_daysBetween(X_train, X_val, firstDate, secondDate):
     '''
     Create new feature days since the last event. 
     Need to be applied to columns with datetime format.
