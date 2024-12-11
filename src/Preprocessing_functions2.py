@@ -98,15 +98,13 @@ def newFeature_binnedGroups(X_train, X_val, columns, bins=6):
     bins: int default: 6
     '''
 
-    
-
     for col in columns:
         # Define bins based on training data
-        train_bins = pd.qcut(X_train[col], q=bins, retbins=True)[1]  # Get bin edges
+        train_bins = pd.qcut(X_train[col], q=bins, retbins=True, duplicates='drop')[1]  # Get bin edges
 
         # Apply the bins to all datasets
-        X_train[f'{col} Group'] = pd.cut(X_train[col], bins=train_bins, labels=False, include_lowest=True)
-        X_val[f'{col} Group'] = pd.cut(X_val[col], bins=train_bins, labels=False, include_lowest=True)
+        X_train[f'{col} Group'] = pd.cut(X_train[col], bins=train_bins, labels=False, include_lowest=True, duplicates='drop')
+        X_val[f'{col} Group'] = pd.cut(X_val[col], bins=train_bins, labels=False, include_lowest=True, duplicates='drop')
 
         X_train[f'{col} Group'] = X_train[f'{col} Group'].astype(str)
         X_val[f'{col} Group'] = X_val[f'{col} Group'].astype(str)
