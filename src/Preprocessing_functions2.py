@@ -297,7 +297,7 @@ def encoding_label(y_train, y_val):
     le = LabelEncoder()
     y_train_encoded = le.fit_transform(y_train)
     y_val_encoded = le.transform(y_val)
-    return y_train_encoded, y_val_encoded
+    return y_train_encoded, y_val_encoded, le
 
 # OneHot Encoder for categorical variables with low cardinality
 def encoding_onehot(X_train, X_val, columns):
