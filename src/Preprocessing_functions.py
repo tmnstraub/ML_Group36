@@ -1,3 +1,4 @@
+#Importing Libraries
 
 import pandas as pd
 import seaborn as sns
@@ -7,6 +8,7 @@ import scipy.stats as stats
 from scipy.stats import chi2_contingency
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import RobustScaler
 from sklearn.impute import KNNImputer
 from sklearn.calibration import LabelEncoder
 from sklearn.preprocessing import OrdinalEncoder
@@ -23,15 +25,7 @@ DESCRIPTION_COLUMNS = ['WCIO Cause of Injury Description',
 
 BOOLEAN_COLUMNS = ['Alternative Dispute Resolution', 'Attorney/Representative','COVID-19 Indicator']
 
-# Drop empty rows
-def drop_empty_rows(X_train, X_val):
-    '''
-    Drop empty rows in the dataset where only Assembly Date is filled
-    '''
-    X_train = X_train[~(X_train.drop(columns=['Assembly Date']).isna().all(axis=1) & X_train['Assembly Date'].notna())]
-    X_val = X_val[~(X_val.drop(columns=['Assembly Date']).isna().all(axis=1) & X_val['Assembly Date'].notna())]
-
-    return X_train, X_val
+### Type conversions
 
 # convert all date columns to datetime format
 def convert_to_datetime(X_train, X_val, columns):
@@ -72,36 +66,59 @@ def convert_to_bool(X_train, X_val, col_names=BOOLEAN_COLUMNS):
         X_val[col_name] = X_val[col_name].map({'Y': True, 'N': False, np.nan: np.nan})
     return X_train, X_val
 
+def type_conversion_categorical(X_train, X_val, coulmns):
+    X_train[coulmns] = X_train[coulmns].astype(str)
+    X_val[coulmns] = X_val[coulmns].astype(str)
+    return X_train, X_val
+
+### drop coulmns 
+
+def drop_description_columns(X_train, X_val):
+    """
+    Drop all columns in X_train and X_val that contain the word 'description' in their names (case-insensitive).
+    """
+    description_columns = X_train.columns[X_train.columns.str.contains('description', case=False, na=False)]
+    
+
+    X_train = X_train.drop(description_columns, axis=1)
+    X_val = X_val.drop(description_columns, axis=1)
+    
+    return X_train, X_val
+
+def drop_unwanted_columns(X_train, X_val, columns):
+    X_train = X_train.drop(columns, axis=1)
+    X_val = X_val.drop(columns, axis=1)
+    return X_train, X_val
+
+### feature creation
+
 # Create new features based on the binned groups of the original features
-def newFeature_binnedGroups(X_train, X_val, X_test, columns, bins=4):
+def newFeature_binnedGroups(X_train, X_val, columns, bins=6):
     '''
     Create new features based on the binned groups of the original features
 
     Parameters:
     X_train: DataFrame
     X_val: DataFrame
-    X_test: DataFrame
     columns: list
-    bins: int default: 4
+    bins: int default: 6
     '''
 
     for col in columns:
         # Define bins based on training data
-        train_bins = pd.qcut(X_train[col], q=bins, retbins=True)[1]  # Get bin edges
+        train_bins = pd.qcut(X_train[col], q=bins, retbins=True, duplicates='drop')[1]  # Get bin edges
 
         # Apply the bins to all datasets
-        X_train[f'{col} Group'] = pd.cut(X_train[col], bins=train_bins, labels=False, include_lowest=True)
-        X_val[f'{col} Group'] = pd.cut(X_val[col], bins=train_bins, labels=False, include_lowest=True)
-        X_test[f'{col} Group'] = pd.cut(X_test[col], bins=train_bins, labels=False, include_lowest=True)
+        X_train[f'{col} Group'] = pd.cut(X_train[col], bins=train_bins, labels=False, include_lowest=True, duplicates='drop')
+        X_val[f'{col} Group'] = pd.cut(X_val[col], bins=train_bins, labels=False, include_lowest=True, duplicates='drop')
 
         X_train[f'{col} Group'] = X_train[f'{col} Group'].astype(str)
         X_val[f'{col} Group'] = X_val[f'{col} Group'].astype(str)
-        X_test[f'{col} Group'] = X_test[f'{col} Group'].astype(str)
 
-    return X_train, X_val, X_test
+    return X_train, X_val
 
 # Create new feature month based on the date feature
-def newFeature_month(X_train, X_val, X_test, columns):
+def newFeature_month(X_train, X_val, columns):
     '''
     Create new feature month based on the date feature. 
     Need to be applied to columns with datetime format.
@@ -116,12 +133,11 @@ def newFeature_month(X_train, X_val, X_test, columns):
     for col in columns:
         X_train[f'{col} Month'] = X_train[col].dt.month
         X_val[f'{col} Month'] = X_val[col].dt.month
-        X_test[f'{col} Month'] = X_test[col].dt.month
 
     return X_train, X_val
 
 # Create new feature days since the last event
-def newFeature_daysBetween(X_train, X_val, X_test, firstDate, secondDate):
+def newFeature_daysBetween(X_train, X_val, firstDate, secondDate):
     '''
     Create new feature days since the last event. 
     Need to be applied to columns with datetime format.
@@ -135,10 +151,34 @@ def newFeature_daysBetween(X_train, X_val, X_test, firstDate, secondDate):
 
     X_train[f'Days Between {firstDate} and {secondDate}'] = (X_train[secondDate].max() - X_train[firstDate]).dt.days
     X_val[f'Days Between {firstDate} and {secondDate}'] = (X_val[secondDate].max() - X_val[firstDate]).dt.days
-    X_test[f'Days Between {firstDate} and {secondDate}'] = (X_test[secondDate].max() - X_test[firstDate]).dt.days
 
-    return X_train, X_val, X_test
+    return X_train, X_val
 
+
+
+def newFeature_hasIME4(X_train, X_val):
+    '''
+    Create new feature 'Has IME-4' based on the 'IME-4 Count' feature. 
+
+    Parameters:
+    X_train: DataFrame
+    X_val: DataFrame
+    '''
+    X_train['Has IME-4'] = X_train['IME-4 Count'].apply(lambda x: 0 if pd.isna(x) else 1)
+    X_val['Has IME-4'] = X_val['IME-4 Count'].apply(lambda x: 0 if pd.isna(x) else 1)
+
+    return X_train, X_val
+
+def feature_creation_has_Cdate (X_train, X_val):
+    X_train['Has C-3 Date'] = X_train['C-3 Date'].apply(lambda x: 0 if pd.isna(x) else 1)
+    X_val['Has C-3 Date'] = X_val['C-3 Date'].apply(lambda x: 0 if pd.isna(x) else 1)
+    X_train['Has C-2 Date'] = X_train['C-2 Date'].apply(lambda x: 0 if pd.isna(x) else 1)
+    X_val['Has C-2 Date'] = X_val['C-2 Date'].apply(lambda x: 0 if pd.isna(x) else 1)
+    X_train['Has First Hearing Date'] = X_train['C-2 Date'].apply(lambda x: 0 if pd.isna(x) else 1)
+    X_val['Has First Hearing Date'] = X_val['C-2 Date'].apply(lambda x: 0 if pd.isna(x) else 1)
+    return X_train, X_val
+
+### Outliers and transformations
 
 # Push outliers to upper and lower bounds
 def outliers_iqr(X_train, X_val, columns):
@@ -158,24 +198,85 @@ def outliers_iqr(X_train, X_val, columns):
     return X_train, X_val
 
 # Push outliers to upper bound and lower bound but give the possibilty to choos a specific value for both bounds. If the value is None, the bound will be calculated using the IQR method lower and upper bound is not filled use the IQR method
-def outliers_specific(X_train, X_val, columns, lower_bound=None, upper_bound=None):
+def outliers_specific(X_train, X_val, columns, lower_bound=None):
     '''
     Push outliers to upper bound and lower bound but give the possibilty to choose a specific value for both bounds. 
     If the any boundary value is None, the bound will be calculated using the IQR method
     '''
     for col in columns:
-        if lower_bound is None or upper_bound is None:
-            Q1 = X_train[col].quantile(0.25)
-            Q3 = X_train[col].quantile(0.75)
-            IQR = Q3 - Q1
-            lower_bound = Q1 - 1.5 * IQR
-            upper_bound = Q3 + 1.5 * IQR
+        Q1 = X_train[col].quantile(0.25)
+        Q3 = X_train[col].quantile(0.75)
+        IQR = Q3 - Q1
+        upper_bound = int(Q3 + 1.5 * IQR)
+        
+
+        if lower_bound is None:
+            lower_bound = int(Q1 - 1.5 * IQR)
+            
         X_train[col] = np.where(X_train[col] < lower_bound, lower_bound, X_train[col])
         X_train[col] = np.where(X_train[col] > upper_bound, upper_bound, X_train[col])
         X_val[col] = np.where(X_val[col] < lower_bound, lower_bound, X_val[col])
         X_val[col] = np.where(X_val[col] > upper_bound, upper_bound, X_val[col])
     return X_train, X_val
 
+# Push outliers to upper bound and lower bound but give the possibilty to choos a specific value for both bounds. If the value is None, the bound will be calculated using the IQR method lower and upper bound is not filled use the IQR method
+def outliers_specific2(X_train, X_val, str, lower_bound=None):
+    '''
+    Push outliers to upper bound and lower bound but give the possibilty to choose a specific value for both bounds. 
+    If the any boundary value is None, the bound will be calculated using the IQR method
+    '''
+
+    Q1 = X_train[str].quantile(0.25)
+    Q3 = X_train[str].quantile(0.75)
+    IQR = Q3 - Q1
+    upper_bound = int(Q3 + 1.5 * IQR)
+        
+
+    if lower_bound is None:
+        lower_bound = int(Q1 - 1.5 * IQR)
+            
+    X_train[str] = np.where(X_train[str] < lower_bound, lower_bound, X_train[str])
+    X_train[str] = np.where(X_train[str] > upper_bound, upper_bound, X_train[str])
+    X_val[str] = np.where(X_val[str] < lower_bound, lower_bound, X_val[str])
+    X_val[str] = np.where(X_val[str] > upper_bound, upper_bound, X_val[str])
+    return X_train, X_val
+
+def winsorize_outliers(X_train, X_val, columns):
+    """
+    Winsorizes outliers in the specified columns for X_train and X_val.
+    The bounds are calculated based on the X_train data.
+    """
+    for column in columns:
+        # Calculate bounds based on X_train
+        q1 = X_train[column].quantile(0.25)
+        q3 = X_train[column].quantile(0.75)
+        iqr = q3 - q1
+
+        lower_bound = q1 - 1.5 * iqr
+        upper_bound = q3 + 1.5 * iqr
+
+        # Winsorize the column in X_train
+        X_train[column] = X_train[column].apply(
+            lambda x: lower_bound if x < lower_bound else (upper_bound if x > upper_bound else x)
+        )
+
+        # Winsorize the column in X_val using the same bounds
+        X_val[column] = X_val[column].apply(
+            lambda x: lower_bound if x < lower_bound else (upper_bound if x > upper_bound else x)
+        )
+
+    return X_train, X_val
+
+def log_transform(X_train, X_val):
+    '''
+    Apply log transformation to the specified columns in X_train and X_val
+    '''
+
+    X_train['Average Weekly Wage'] = X_train['Average Weekly Wage'].apply(lambda x: np.log1p(x) if x > 0 else 0)
+    X_val['Average Weekly Wage'] = X_val['Average Weekly Wage'].apply(lambda x: np.log1p(x) if x > 0 else 0)
+    return X_train, X_val
+
+### scaling and encoding
 
 # MinMax Scaler
 def scaling_minmax(X_train, X_val, columns):
@@ -196,6 +297,15 @@ def scaling_standard(X_train, X_val, columns):
     
     return X_train, X_val
 
+def scaling_robust(X_train, X_val, columns):
+
+    scaler = RobustScaler()
+
+    X_train[columns] = scaler.fit_transform(X_train[columns])
+    X_val[columns] = scaler.transform(X_val[columns])
+    
+    return X_train, X_val
+
 # Label Encoder for target variable
 def encoding_label(y_train, y_val):
     '''
@@ -204,7 +314,7 @@ def encoding_label(y_train, y_val):
     le = LabelEncoder()
     y_train_encoded = le.fit_transform(y_train)
     y_val_encoded = le.transform(y_val)
-    return y_train_encoded, y_val_encoded
+    return y_train_encoded, y_val_encoded, le
 
 # OneHot Encoder for categorical variables with low cardinality
 def encoding_onehot(X_train, X_val, columns):
@@ -278,17 +388,7 @@ def encoding_frequency2(X_train, X_val, columns):
         frequency_map = X_train[col].value_counts(normalize=True)
         X_train[col] = X_train[col].map(frequency_map)
         X_val[col] = X_val[col].map(frequency_map).fillna(0)
-
-    X_train_rest = X_train.drop(columns, axis=1)
-    X_val_rest = X_val.drop(columns, axis=1)
-    
-    X_train_final = pd.concat([X_train_rest, X_train[columns]], axis=1)
-    X_val_final = pd.concat([X_val_rest, X_val[columns]], axis=1)
-    
-    X_train_final.index = X_train.index
-    X_val_final.index = X_val.index
-
-    return X_train_final, X_val_final
+    return X_train, X_val
 
 # Ordinal Encoding for categorical variables with ordinality
 def encoding_ordinal(X_train, X_val, columns):
@@ -300,40 +400,7 @@ def encoding_ordinal(X_train, X_val, columns):
     X_val_encoded = pd.DataFrame(oe.transform(X_val[columns]), columns=columns)
     return X_train_encoded, X_val_encoded
 
-def remove_outliers_iqr(X_train, X_val, columns):
-    """
-    Remove rows with outliers using the IQR method.
-    
-    """
-    for col in columns:
-        Q1 = X_train[col].quantile(0.25)
-        Q3 = X_train[col].quantile(0.75)
-        IQR = Q3 - Q1
-        lower_bound = Q1 - 1.5 * IQR
-        upper_bound = Q3 + 1.5 * IQR
-
-        # Remove outliers from X_train
-        X_train = X_train[(X_train[col] >= lower_bound) & (X_train[col] <= upper_bound)]
-        
-        # Remove outliers from X_val (based on X_train bounds)
-        X_val = X_val[(X_val[col] >= lower_bound) & (X_val[col] <= upper_bound)]
-
-    return X_train, X_val
-
-def convert_dates_to_timestamps(df):
-    # Create a copy to avoid modifying the original DataFrame
-    df = df.copy()
-
-    for col in df.columns:
-        if 'Date' in col:
-            # Convert the column to datetime, coerce invalid parsing to NaT
-            df[col] = pd.to_datetime(df[col], errors='coerce')
-
-        #Convert to timestamp only for valid datetime values
-            df[col] = df[col].apply(lambda x: x.timestamp() if pd.notnull(x) else np.nan)
-
-    return df
-
+### imputations
 
 def impute_mean_numerical(X_train, X_val, columns):
     """
@@ -351,6 +418,7 @@ def impute_mean_numerical(X_train, X_val, columns):
 
     return X_train, X_val
 
+
 def impute_mode_categorical(X_train, X_val, columns):
     """
     Impute missing values for categorical variables with the mode of the training data.
@@ -366,6 +434,37 @@ def impute_mode_categorical(X_train, X_val, columns):
         X_val[col].fillna(mode_value, inplace=True)
 
     return X_train, X_val
+
+def impute_weekly_wage_with_zipIndustryCode(X_train, X_val):
+    """
+    Impute missing 'Average Weekly Wage' values for X_train and X_val
+    based on the mean of 'Zip Code' and 'Industry Code'.
+
+    Parameters:
+    - X_train: Training DataFrame with 'Average Weekly Wage', 'Zip Code', and 'Industry Code'.
+    - X_val: Validation DataFrame with the same columns.
+
+    Returns:
+    - X_train: Updated training DataFrame with imputed 'Average Weekly Wage'.
+    - X_val: Updated validation DataFrame with imputed 'Average Weekly Wage'.
+    """
+    # Step 1: Compute the mean weekly wage by 'Zip Code' and 'Industry Code' in X_train
+    mean_wage_by_zip_industry = X_train.groupby(['Zip Code', 'Industry Code'])['Average Weekly Wage'].mean()
+
+    # Step 2: Define the imputation function
+    def impute_weekly_wage(row):
+        if pd.isnull(row['Average Weekly Wage']):
+            # Get the mean wage for the specific combination of 'Zip Code' and 'Industry Code'
+            return mean_wage_by_zip_industry.get((row['Zip Code'], row['Industry Code']), np.nan)
+        else:
+            return row['Average Weekly Wage']
+
+    # Step 3: Apply the imputation function to both datasets
+    X_train['Average Weekly Wage'] = X_train.apply(impute_weekly_wage, axis=1)
+    X_val['Average Weekly Wage'] = X_val.apply(impute_weekly_wage, axis=1)
+
+    return X_train, X_val
+
 
 def compute_most_frequent_code_per_description(df, code_columns):
     '''
@@ -462,12 +561,14 @@ def fill_missing_codes_description_based(X_train, X_val):
 def fillna_zip_code(X_train, X_val):
     """
     Fills missing 'Zip Code' values in train and validation datasets based on modes.
-    first if their is a conty of injury and district name match then fill with mode zip code
-    if not fill with mode zip code of district name
+    First, if there is a County of Injury and District Name match, fill with mode Zip Code.
+    If not, fill with mode Zip Code of District Name.
     """
-    # Save original indices
+    # Save original indices and ensure boolean columns remain intact
     original_index_train = X_train.index
     original_index_val = X_val.index
+    boolean_columns_train = X_train[BOOLEAN_COLUMNS].copy()
+    boolean_columns_val = X_val[BOOLEAN_COLUMNS].copy()
 
     # Calculate mode Zip Codes for each group in X_train
     mode_zip_codes_train = (
@@ -514,19 +615,24 @@ def fillna_zip_code(X_train, X_val):
     X_val = fill_zip_codes(X_val)
     X_train = fill_zip_codes(X_train)
 
-    # Restore original indices
+    # Restore original indices and boolean column values
     X_train.index = original_index_train
     X_val.index = original_index_val
+    X_train[BOOLEAN_COLUMNS] = boolean_columns_train
+    X_val[BOOLEAN_COLUMNS] = boolean_columns_val
 
     return X_train, X_val
+
 
 def fillnan_accident_date(X_train,X_val):
     """
     this function fills the missing values in the 'Accident Date' column with the mean difference between 'C-2 Date' and 'Accident Date'
     """
-    X_train['time_diff C2 accident'] = X_train['Accident Date']-X_train['C-2 Date']
+    X_temp = X_train.copy()
 
-    mean_difference_c2_accident = X_train['time_diff C2 accident'].mean()
+    X_temp['time_diff C2 accident'] = X_temp['Accident Date']-X_temp['C-2 Date']
+
+    mean_difference_c2_accident = X_temp['time_diff C2 accident'].mean()
     
     X_train['Accident Date'].fillna(X_train['C-2 Date'] - mean_difference_c2_accident, inplace=True)
     X_val['Accident Date'].fillna(X_val['C-2 Date'] - mean_difference_c2_accident, inplace=True)
@@ -568,6 +674,14 @@ def fillnan_birth_year(X_train, X_val):
     X_train = process_birth_year_columns(X_train)
     X_val = process_birth_year_columns(X_val)
     return X_train, X_val
+
+def fillnan_IME4_count(X_train, X_val):
+    """
+    this function fills the missing values in the 'IME-4 Count' column with 0 as is just means that there is no IME-4 count
+    """
+    X_train["IME-4 Count"].fillna(0, inplace=True)
+    X_val["IME-4 Count"].fillna(0, inplace=True)
+    return X_train, X_val
     
 def fill_missing_with_mode(X_train, X_val):
     '''
@@ -595,14 +709,69 @@ def drop_description_columns(X_train, X_val):
 
     return X_train, X_val
 
-def feature_creation_has_Cdate (X_train, X_val):
-    X_train['Has C-3 Date'] = X_train['C-3 Date'].apply(lambda x: 0 if pd.isna(x) else 1)
-    X_val['Has C-3 Date'] = X_val['C-3 Date'].apply(lambda x: 0 if pd.isna(x) else 1)
-    X_train['Has C-2 Date'] = X_train['C-2 Date'].apply(lambda x: 0 if pd.isna(x) else 1)
-    X_val['Has C-2 Date'] = X_val['C-2 Date'].apply(lambda x: 0 if pd.isna(x) else 1)
-    X_train['Has First Hearing Date'] = X_train['C-2 Date'].apply(lambda x: 0 if pd.isna(x) else 1)
-    X_val['HasFirst Hearing Date'] = X_val['C-2 Date'].apply(lambda x: 0 if pd.isna(x) else 1)
-    return X_train, X_val
+def impute_missing_with_knn(X_train, X_val, X_test, n_neighbors=5):
+    """
+    Imputes missing values in the datasets using KNNImputer.
+    
+    Parameters:
+    - X_train: Training dataset (Pandas DataFrame)
+    - X_val: Validation dataset (Pandas DataFrame)
+    - X_test: Test dataset (Pandas DataFrame)
+    - n_neighbors: Number of neighbors for KNN imputer (default=5)
+    
+    Returns:
+    - X_train_imputed: Training dataset after imputation
+    - X_val_imputed: Validation dataset after imputation
+    - X_test_imputed: Test dataset after imputation
+    """
+    # Step 1: Copy datasets to avoid modifying originals
+    X_train_knn = X_train.copy()
+    X_val_knn = X_val.copy()
+    X_test_knn = X_test.copy()
+
+    # Step 2: Handle specific column 'IME-4 Count'
+    for dataset in [X_train_knn, X_val_knn, X_test_knn]:
+        dataset["IME-4 Count"].fillna(0, inplace=True)
+    
+    # Step 3: Identify Columns with Missing Values
+    missing_columns = X_train_knn.columns[X_train_knn.isnull().any()]
+    print("Columns with missing values:", missing_columns)
+
+    # Step 4: Ensure consistent encoding for all categorical columns
+    datasets = {'train': X_train_knn, 'val': X_val_knn, 'test': X_test_knn}
+    label_encoders = {}  # Store encoders for each column
+
+    for column in X_train_knn.columns:
+        # Check if the column contains categorical data
+        if X_train_knn[column].dtype == 'object' or X_train_knn[column].apply(lambda x: isinstance(x, str)).any():
+            # Initialize and fit Label Encoder
+            le = LabelEncoder()
+            X_train_knn[column] = X_train_knn[column].astype(str)
+            X_train_knn[column] = le.fit_transform(X_train_knn[column])
+            
+            # Store encoder for future use
+            label_encoders[column] = le
+            
+            # Apply encoder to validation and test sets
+            for name in ['val', 'test']:
+                datasets[name][column] = datasets[name][column].astype(str).apply(
+                    lambda x: x if x in le.classes_ else np.nan)
+                le.classes_ = np.append(le.classes_, np.nan)  # Add NaN as a class
+                datasets[name][column] = le.transform(datasets[name][column])
+
+    # Step 5: Apply KNN Imputer
+    imputer = KNNImputer(n_neighbors=n_neighbors, weights="uniform", metric="nan_euclidean")
+    print("Applying KNN imputer...")
+
+    X_train_imputed = pd.DataFrame(imputer.fit_transform(X_train_knn), columns=X_train_knn.columns)
+    X_val_imputed = pd.DataFrame(imputer.transform(X_val_knn), columns=X_val_knn.columns)
+    X_test_imputed = pd.DataFrame(imputer.transform(X_test_knn), columns=X_test_knn.columns)
+    print("Imputation completed on training, validation, and test sets.")
+    X_train_imputed, X_val_imputed, X_test_imputed = impute_missing_with_knn(X_train, X_val, X_test, n_neighbors=5)
+    return X_train_imputed, X_val_imputed, X_test_imputed
+# use the code above to impute missing values in the dataset with using Knn imputer. 
+
+### Feature selection 
 
 def feature_selection_rfe(X_train, y_train, n_features, model):
     """
@@ -672,66 +841,3 @@ def feature_selection_rfecv(X_train, y_train, model, cv_folds=5, scoring='accura
     optimal_num_features = rfecv.n_features_
 
     return X_train_selected, selected_features, feature_ranking, optimal_num_features
-
-# KNN Imputer
-def impute_missing_with_knn(X_train, X_val, X_test, n_neighbors=5):
-    """
-    Imputes missing values in the datasets using KNNImputer.
-    
-    Parameters:
-    - X_train: Training dataset (Pandas DataFrame)
-    - X_val: Validation dataset (Pandas DataFrame)
-    - X_test: Test dataset (Pandas DataFrame)
-    - n_neighbors: Number of neighbors for KNN imputer (default=5)
-    
-    Returns:
-    - X_train_imputed: Training dataset after imputation
-    - X_val_imputed: Validation dataset after imputation
-    - X_test_imputed: Test dataset after imputation
-    """
-    # Step 1: Copy datasets to avoid modifying originals
-    X_train_knn = X_train.copy()
-    X_val_knn = X_val.copy()
-    X_test_knn = X_test.copy()
-
-    # Step 2: Handle specific column 'IME-4 Count'
-    for dataset in [X_train_knn, X_val_knn, X_test_knn]:
-        dataset["IME-4 Count"].fillna(0, inplace=True)
-    
-    # Step 3: Identify Columns with Missing Values
-    missing_columns = X_train_knn.columns[X_train_knn.isnull().any()]
-    print("Columns with missing values:", missing_columns)
-
-    # Step 4: Ensure consistent encoding for all categorical columns
-    datasets = {'train': X_train_knn, 'val': X_val_knn, 'test': X_test_knn}
-    label_encoders = {}  # Store encoders for each column
-
-    for column in X_train_knn.columns:
-        # Check if the column contains categorical data
-        if X_train_knn[column].dtype == 'object' or X_train_knn[column].apply(lambda x: isinstance(x, str)).any():
-            # Initialize and fit Label Encoder
-            le = LabelEncoder()
-            X_train_knn[column] = X_train_knn[column].astype(str)
-            X_train_knn[column] = le.fit_transform(X_train_knn[column])
-            
-            # Store encoder for future use
-            label_encoders[column] = le
-            
-            # Apply encoder to validation and test sets
-            for name in ['val', 'test']:
-                datasets[name][column] = datasets[name][column].astype(str).apply(
-                    lambda x: x if x in le.classes_ else np.nan)
-                le.classes_ = np.append(le.classes_, np.nan)  # Add NaN as a class
-                datasets[name][column] = le.transform(datasets[name][column])
-
-    # Step 5: Apply KNN Imputer
-    imputer = KNNImputer(n_neighbors=n_neighbors, weights="uniform", metric="nan_euclidean")
-    print("Applying KNN imputer...")
-
-    X_train_imputed = pd.DataFrame(imputer.fit_transform(X_train_knn), columns=X_train_knn.columns)
-    X_val_imputed = pd.DataFrame(imputer.transform(X_val_knn), columns=X_val_knn.columns)
-    X_test_imputed = pd.DataFrame(imputer.transform(X_test_knn), columns=X_test_knn.columns)
-    print("Imputation completed on training, validation, and test sets.")
-    X_train_imputed, X_val_imputed, X_test_imputed = impute_missing_with_knn(X_train, X_val, X_test, n_neighbors=5)
-    return X_train_imputed, X_val_imputed, X_test_imputed
-# use the code above to impute missing values in the dataset with using Knn imputer. 
