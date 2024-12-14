@@ -94,26 +94,33 @@ def drop_unwanted_columns(X_train, X_val, columns):
 
 # Create new features based on the binned groups of the original features
 def newFeature_binnedGroups(X_train, X_val, columns, bins=6):
-    '''
-    Create new features based on the binned groups of the original features
+    """
+    Create new features based on the binned groups of the original features and rename the columns according to the bins.
 
     Parameters:
     X_train: DataFrame
+        Training data.
     X_val: DataFrame
+        Validation data.
     columns: list
-    bins: int default: 6
-    '''
-
+        List of column names to bin.
+    bins: int, default: 6
+        Number of bins to create.
+    """
     for col in columns:
         # Define bins based on training data
-        train_bins = pd.qcut(X_train[col], q=bins, retbins=True, duplicates='drop')[1]  # Get bin edges
-
-        # Apply the bins to all datasets
-        X_train[f'{col} Group'] = pd.cut(X_train[col], bins=train_bins, labels=False, include_lowest=True, duplicates='drop')
-        X_val[f'{col} Group'] = pd.cut(X_val[col], bins=train_bins, labels=False, include_lowest=True, duplicates='drop')
-
-        X_train[f'{col} Group'] = X_train[f'{col} Group'].astype(str)
-        X_val[f'{col} Group'] = X_val[f'{col} Group'].astype(str)
+        bin_edges = pd.qcut(X_train[col], q=bins, retbins=True, duplicates='drop')[1]  # Get bin edges
+        
+        # Generate bin labels for renaming
+        bin_labels = [
+            f'{col} ({round(bin_edges[i], 2)}-{round(bin_edges[i+1], 2)})' 
+            for i in range(len(bin_edges) - 1)
+        ]
+        
+        #loop over bin_lables and name the newly created columns after them
+        for i in range(len(bin_labels)):
+            X_train[f'{col} {i}'] = (X_train[col] > bin_edges[i]) & (X_train[col] <= bin_edges[i+1])
+            X_val[f'{col} {i}'] = (X_val[col] > bin_edges[i]) & (X_val[col] <= bin_edges[i+1])
 
     return X_train, X_val
 
@@ -131,8 +138,15 @@ def newFeature_month(X_train, X_val, columns):
     '''
 
     for col in columns:
-        X_train[f'{col} Month'] = X_train[col].dt.month
-        X_val[f'{col} Month'] = X_val[col].dt.month
+        # Loop through all months (1 to 12)
+        for month in range(1, 13):
+            # Create a binary column for each month using apply and lambda
+            X_train[f'{col} Month {month}'] = X_train[col].apply(
+                lambda x: True if x.month == month else False
+            )
+            X_val[f'{col} Month {month}'] = X_val[col].apply(
+                lambda x: True if x.month == month else False
+            )
 
     return X_train, X_val
 
