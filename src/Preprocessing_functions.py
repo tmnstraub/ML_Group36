@@ -62,8 +62,8 @@ def convert_to_bool(X_train, X_val, col_names=BOOLEAN_COLUMNS):
     col_names: list default: BOOLEAN_COLUMNS
     '''
     for col_name in col_names:
-        X_train[col_name] = X_train[col_name].map({'Y': True, 'N': False, np.nan: np.nan})
-        X_val[col_name] = X_val[col_name].map({'Y': True, 'N': False, np.nan: np.nan})
+        X_train[f"Has {col_name}"] = X_train[col_name].map({'Y': True, 'N': False, np.nan: np.nan})
+        X_val[f"Has {col_name}"] = X_val[col_name].map({'Y': True, 'N': False, np.nan: np.nan})
     return X_train, X_val
 
 def type_conversion_categorical(X_train, X_val, coulmns):
@@ -151,17 +151,24 @@ def newFeature_month(X_train, X_val, columns):
     return X_train, X_val
 
 # Function to process dates
-def newFeatures_categoricalDates(df, date_columns):
+def newFeatures_categoricalDates(X_train, X_val, date_columns):
     
     for col in date_columns:
-        if col in df.columns:
-            df[col] = pd.to_datetime(df[col], errors='coerce')
-            df[f'{col}_Year'] = df[col].dt.year
-            df[f'{col}_Month'] = df[col].dt.month
-            df[f'{col}_Day'] = df[col].dt.day
-            df[f'{col}_DayOfWeek'] = df[col].dt.dayofweek
-            
-    return df
+        if col in X_train.columns:
+            X_train[col] = pd.to_datetime(X_train[col], errors='coerce')
+            X_train[f'{col}_Year'] = X_train[col].dt.year
+            X_train[f'{col}_Month'] = X_train[col].dt.month
+            X_train[f'{col}_Day'] = X_train[col].dt.day
+            X_train[f'{col}_DayOfWeek'] = X_train[col].dt.dayofweek
+
+        if col in X_val.columns:
+            X_val[col] = pd.to_datetime(X_val[col], errors='coerce')
+            X_val[f'{col}_Year'] = X_val[col].dt.year
+            X_val[f'{col}_Month'] = X_val[col].dt.month
+            X_val[f'{col}_Day'] = X_val[col].dt.day
+            X_val[f'{col}_DayOfWeek'] = X_val[col].dt.dayofweek
+
+    return X_train, X_val
 
 # Create new feature days since the last event
 def newFeature_daysBetween(X_train, X_val, firstDate, secondDate):
@@ -203,6 +210,12 @@ def feature_creation_has_Cdate (X_train, X_val):
     X_val['Has C-2 Date'] = X_val['C-2 Date'].apply(lambda x: 0 if pd.isna(x) else 1)
     X_train['Has First Hearing Date'] = X_train['C-2 Date'].apply(lambda x: 0 if pd.isna(x) else 1)
     X_val['Has First Hearing Date'] = X_val['C-2 Date'].apply(lambda x: 0 if pd.isna(x) else 1)
+    return X_train, X_val
+
+def feature_creation_has_Date (X_train, X_val, columns):
+    for col in columns:
+        X_train[f'Has {col}'] = X_train[col].apply(lambda x: 0 if pd.isna(x) else 1)
+        X_val[f'Has {col}'] = X_val[col].apply(lambda x: 0 if pd.isna(x) else 1)
     return X_train, X_val
 
 ### Outliers and transformations
