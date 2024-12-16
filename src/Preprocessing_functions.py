@@ -150,6 +150,19 @@ def newFeature_month(X_train, X_val, columns):
 
     return X_train, X_val
 
+# Function to process dates
+def newFeatures_categoricalDates(df, date_columns):
+    
+    for col in date_columns:
+        if col in df.columns:
+            df[col] = pd.to_datetime(df[col], errors='coerce')
+            df[f'{col}_Year'] = df[col].dt.year
+            df[f'{col}_Month'] = df[col].dt.month
+            df[f'{col}_Day'] = df[col].dt.day
+            df[f'{col}_DayOfWeek'] = df[col].dt.dayofweek
+            
+    return df
+
 # Create new feature days since the last event
 def newFeature_daysBetween(X_train, X_val, firstDate, secondDate):
     '''
