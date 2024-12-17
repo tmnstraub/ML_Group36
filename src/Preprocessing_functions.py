@@ -23,7 +23,7 @@ DESCRIPTION_COLUMNS = ['WCIO Cause of Injury Description',
                        'WCIO Nature of Injury Description','WCIO Part Of Body Description',
                        'Industry Code Description']
 
-BOOLEAN_COLUMNS = ['Alternative Dispute Resolution', 'Attorney/Representative','COVID-19 Indicator']
+BOOLEAN_COLUMNS = ['Attorney/Representative','COVID-19 Indicator']
 
 ### Type conversions
 
