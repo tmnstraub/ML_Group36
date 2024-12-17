@@ -198,8 +198,8 @@ def newFeature_hasIME4(X_train, X_val):
     X_train: DataFrame
     X_val: DataFrame
     '''
-    X_train['Has IME-4'] = X_train['IME-4 Count'].apply(lambda x: 0 if pd.isna(x) else 1)
-    X_val['Has IME-4'] = X_val['IME-4 Count'].apply(lambda x: 0 if pd.isna(x) else 1)
+    X_train['Has IME-4'] = X_train['IME-4 Count'].apply(lambda x: 0 if pd.isna(x) or 0 else 1)
+    X_val['Has IME-4'] = X_val['IME-4 Count'].apply(lambda x: 0 if pd.isna(x) or 0 else 1)
 
     return X_train, X_val
 
